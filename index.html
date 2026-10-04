@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Into the Light — A Journey of Small Glows</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --panel-bg: #1a1a28;
+    --panel-dark: #0c0c14;
+    --panel-light: #3c3c54;
+    --text-main: #f0ead8;
+    --text-dim: #9a9488;
+    --accent: #ffcf7a;
+    --accent-dark: #b8862e;
+  }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #000; overflow: hidden;
+    font-family: 'Press Start 2P', monospace;
+    image-rendering: pixelated;
+  }
+  #wrap {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  #stage { position: relative; }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 4px solid var(--panel-light);
+    outline: 4px solid var(--panel-dark);
+    width: 90vw; height: calc(90vw * 9 / 16);
+    max-height: 74vh; max-width: calc(74vh * 16 / 9);
+    background: #000;
+    display: block;
+  }
+
+  /* Shared pixel-panel look: flat color, square corners, stepped bevel border */
+  .pixel-panel {
+    background: var(--panel-bg);
+    border-top: 3px solid var(--panel-light);
+    border-left: 3px solid var(--panel-light);
+    border-bottom: 3px solid var(--panel-dark);
+    border-right: 3px solid var(--panel-dark);
+    box-shadow: 0 0 0 2px #000;
+    border-radius: 0;
+  }
+
+  /* ---------- Top HUD: level title + progress ---------- */
+  #hud {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    padding: 10px 18px;
+    display: flex; align-items: center; gap: 18px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #levelTitle { color: var(--text-main); font-size: 10px; letter-spacing: 0.5px; }
+  #progressText { color: var(--accent); font-size: 10px; }
+
+  /* ---------- Bottom-left: control hint with key icons ---------- */
+  #controlsPanel {
+    position: absolute; bottom: 8px; left: 8px;
+    padding: 10px;
+    display: flex; align-items: center; gap: 10px;
+    pointer-events: none;
+    max-width: 70vw;
+  }
+  .key-grid { display: grid; grid-template-columns: repeat(3, 18px); grid-template-rows: repeat(2, 18px); gap: 3px; flex-shrink: 0; }
+  .key {
+    display: flex; align-items: center; justify-content: center;
+    background: var(--panel-light);
+    border-top: 2px solid #56567a; border-left: 2px solid #56567a;
+    border-bottom: 2px solid #18182a; border-right: 2px solid #18182a;
+    color: var(--text-main); font-size: 8px; font-family: 'Press Start 2P', monospace;
+  }
+  .key.empty { background: transparent; border: none; box-shadow: none; }
+  #controlsPanel .hint-text { color: var(--text-dim); font-size: 8px; line-height: 1.8; max-width: 220px; }
+
+  /* ---------- Settings toggle + panel ---------- */
+  #settingsToggle {
+    position: absolute; top: 8px; right: 8px;
+    width: 34px; height: 34px;
+    background: var(--panel-bg);
+    border-top: 3px solid var(--panel-light); border-left: 3px solid var(--panel-light);
+    border-bottom: 3px solid var(--panel-dark); border-right: 3px solid var(--panel-dark);
+    box-shadow: 0 0 0 2px #000;
+    color: var(--text-main); font-size: 15px; cursor: pointer;
+    font-family: 'Press Start 2P', monospace;
+  }
+  #settingsToggle:active { border-top-color: var(--panel-dark); border-left-color: var(--panel-dark); border-bottom-color: var(--panel-light); border-right-color: var(--panel-light); }
+  #settingsPanel {
+    position: absolute; top: 50px; right: 8px;
+    padding: 14px 16px;
+    display: none; flex-direction: column; gap: 10px;
+    min-width: 190px;
+  }
+  #settingsPanel.open { display: flex; }
+  #settingsPanel label {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    color: var(--text-dim); font-size: 8px;
+  }
+  #settingsPanel input[type="range"] { width: 90px; accent-color: var(--accent); }
+
+  /* ---------- Overlays ---------- */
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.6);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s steps(4);
+  }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+  .overlay-card {
+    padding: 32px 40px;
+    text-align: center;
+  }
+  .overlay-title { color: var(--text-main); font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
+  .overlay-sub { color: var(--text-dim); font-size: 9px; line-height: 1.8; margin-bottom: 22px; max-width: 320px; }
+  .overlay-btn {
+    background: var(--accent); color: #241c0a;
+    border-top: 3px solid #ffe3ab; border-left: 3px solid #ffe3ab;
+    border-bottom: 3px solid var(--accent-dark); border-right: 3px solid var(--accent-dark);
+    box-shadow: 0 0 0 2px #000;
+    padding: 12px 24px;
+    font-size: 10px; font-family: 'Press Start 2P', monospace; cursor: pointer;
+  }
+  .overlay-btn:active {
+    border-top-color: var(--accent-dark); border-left-color: var(--accent-dark);
+    border-bottom-color: #ffe3ab; border-right-color: #ffe3ab;
+  }
+
+  /* ---------- Start screen ---------- */
+  #startScreen {
+    position: absolute; inset: 0;
+    background: #07070c;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; padding: 24px; text-align: center;
+  }
+  #startScreen.hidden { display: none; }
+  .game-title {
+    font-size: clamp(30px, 7vw, 54px);
+    color: var(--accent);
+    text-shadow: 4px 4px 0 var(--accent-dark), 8px 8px 0 #000;
+    letter-spacing: 2px;
+  }
+  .game-desc {
+    color: var(--text-dim); font-size: 9px; line-height: 2.1;
+    max-width: 440px;
+  }
+  .big-btn { font-size: 13px; padding: 16px 44px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="game"></canvas>
+
+    <div id="hud" class="pixel-panel">
+      <div id="levelTitle">Level 1: Midnight Forest</div>
+      <div id="progressText">Awakened 0 / 7</div>
+    </div>
+
+    <div id="controlsPanel" class="pixel-panel">
+      <div class="key-grid">
+        <div class="key empty"></div><div class="key">W</div><div class="key empty"></div>
+        <div class="key">A</div><div class="key">S</div><div class="key">D</div>
+      </div>
+      <div class="hint-text" id="hintText">Move. Hold your light on the dark until something wakes up.</div>
+    </div>
+
+    <button id="settingsToggle" class="pixel-panel">&#9881;</button>
+    <div id="settingsPanel" class="pixel-panel">
+      <label>Speed <input id="speedCtrl" type="range" min="0.4" max="3" step="0.1" value="1.0"></label>
+      <label>Fade speed <input id="decayCtrl" type="range" min="0.85" max="0.99" step="0.01" value="0.94"></label>
+      <label>Light size <input id="radiusCtrl" type="range" min="4" max="26" step="1" value="12"></label>
+      <label>Brightness <input id="intensityCtrl" type="range" min="15" max="90" step="5" value="35"></label>
+      <label id="wobbleRow">Edge wobble <input id="wobbleCtrl" type="range" min="0" max="0.4" step="0.02" value="0.22"></label>
+      <label id="bloomRow">Bloom <input id="bloomCtrl" type="range" min="4" max="20" step="1" value="10"></label>
+    </div>
+
+    <div id="nextLevelOverlay" class="overlay">
+      <div class="overlay-card pixel-panel">
+        <div class="overlay-title">ALL CREATURES<br>AWAKENED!</div>
+        <div class="overlay-sub" id="nextLevelSub">The forest is glowing. Ready to move on?</div>
+        <button class="overlay-btn" id="nextLevelBtn">NEXT LEVEL &#9654;</button>
+      </div>
+    </div>
+
+    <div id="endOverlay" class="overlay">
+      <div class="overlay-card pixel-panel">
+        <div class="overlay-title">&#9733; YOU FOUND<br>THEM ALL &#9733;</div>
+        <div class="overlay-sub">Forest, ocean, and city park — every little light is on.</div>
+        <button class="overlay-btn" id="restartBtn">PLAY AGAIN &#8635;</button>
+      </div>
+    </div>
+
+    <div id="startScreen">
+      <div class="game-title">FIND!</div>
+      <div class="game-desc">Something small is hiding in every dark place.<br>
+      Carry your light, search the shadows, and watch<br>
+      each little creature wake up and start to glow.</div>
+      <button class="overlay-btn big-btn" id="startBtn">START</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Shared engine constants
+// ============================================================
+const CELL = 8;
+const GRID_W = 240;
+const GRID_H = 135;
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = GRID_W * CELL;
+canvas.height = GRID_H * CELL;
+
+const worldCanvas = document.createElement('canvas');
+worldCanvas.width = canvas.width;
+worldCanvas.height = canvas.height;
+const worldCtx = worldCanvas.getContext('2d');
+
+let seed = 1234;
+function rand() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+function hexToRgb(hex) {
+  return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+}
+function lerpRamp(ramp, t) {
+  t = Math.max(0, Math.min(1, t));
+  const pos = t * (ramp.length - 1);
+  const i0 = Math.floor(pos), i1 = Math.min(ramp.length-1, i0+1);
+  const frac = pos - i0;
+  const c0 = hexToRgb(ramp[i0]), c1 = hexToRgb(ramp[i1]);
+  const r = Math.round(c0[0]+(c1[0]-c0[0])*frac);
+  const g = Math.round(c0[1]+(c1[1]-c0[1])*frac);
+  const b = Math.round(c0[2]+(c1[2]-c0[2])*frac);
+  return `rgb(${r},${g},${b})`;
+}
+function wavy(xNorm, seedOffset, ampBase) {
+  return (
+    Math.sin(xNorm * 6.0 + seedOffset) * ampBase +
+    Math.sin(xNorm * 13.0 - seedOffset * 1.7) * ampBase * 0.5 +
+    Math.sin(xNorm * 21.0 + seedOffset * 2.3) * ampBase * 0.25
+  );
+}
+function darkenColor(hex, factor) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgb(${Math.round(r*factor)},${Math.round(g*factor)},${Math.round(b*factor)})`;
+}
+function fillEllipseLocal(targetCtx, bgx, bgy, cx, cy, rx, ry, color, alpha) {
+  targetCtx.globalAlpha = alpha;
+  targetCtx.fillStyle = color;
+  const left=Math.floor(cx-rx), right=Math.ceil(cx+rx), top=Math.floor(cy-ry), bottom=Math.ceil(cy+ry);
+  for (let dy=top; dy<=bottom; dy++) {
+    for (let dx=left; dx<=right; dx++) {
+      const nx=(dx-cx)/rx, ny=(dy-cy)/ry;
+      if (nx*nx+ny*ny>1) continue;
+      targetCtx.fillRect((bgx+dx)*CELL, (bgy+dy)*CELL, CELL, CELL);
+    }
+  }
+  targetCtx.globalAlpha = 1;
+}
+
+// ============================================================
+// Light field (shared across all levels, reset when a level starts)
+// ============================================================
+let lightField = new Float32Array(GRID_W * GRID_H);
+function idx(x, y) { return y * GRID_W + x; }
+const CAP = 0.95;
+
+function addSoftLightSource(cx, cy, radius, wobbleAmt, intensity, t, seedOff) {
+  const maxR = radius * (1 + wobbleAmt);
+  const minX = Math.max(0, Math.floor(cx-maxR-1)), maxX = Math.min(GRID_W-1, Math.ceil(cx+maxR+1));
+  const minY = Math.max(0, Math.floor(cy-maxR-1)), maxY = Math.min(GRID_H-1, Math.ceil(cy+maxR+1));
+  for (let yy = minY; yy <= maxY; yy++) {
+    for (let xx = minX; xx <= maxX; xx++) {
+      const dx = xx-cx, dy = yy-cy;
+      const d = Math.hypot(dx, dy);
+      if (d > maxR) continue;
+      const angle = Math.atan2(dy, dx);
+      const wobble = Math.sin(angle*3+t*0.0012+seedOff)*0.5 + Math.sin(angle*5-t*0.0019+seedOff)*0.3 + Math.sin(angle*7+t*0.0008+seedOff)*0.2;
+      const effR = radius * (1 + wobbleAmt*wobble);
+      if (d > effR) continue;
+      const add = (1 - d/effR) * (intensity/100);
+      lightField[idx(xx,yy)] = Math.min(CAP, lightField[idx(xx,yy)] + add);
+    }
+  }
+}
+function addHardLightSource(cx, cy, radius, intensity) {
+  const minX = Math.max(0, Math.floor(cx-radius-1)), maxX = Math.min(GRID_W-1, Math.ceil(cx+radius+1));
+  const minY = Math.max(0, Math.floor(cy-radius-1)), maxY = Math.min(GRID_H-1, Math.ceil(cy+radius+1));
+  const add = intensity / 100;
+  for (let yy = minY; yy <= maxY; yy++) {
+    for (let xx = minX; xx <= maxX; xx++) {
+      const d = Math.hypot(xx-cx, yy-cy);
+      if (d > radius) continue;
+      const i = idx(xx, yy);
+      lightField[i] = Math.min(CAP, lightField[i] + add);
+    }
+  }
+}
+function addRadialBloom(cx, cy, radius, intensity) {
+  const minX = Math.max(0, Math.floor(cx-radius-1)), maxX = Math.min(GRID_W-1, Math.ceil(cx+radius+1));
+  const minY = Math.max(0, Math.floor(cy-radius-1)), maxY = Math.min(GRID_H-1, Math.ceil(cy+radius+1));
+  for (let yy = minY; yy <= maxY; yy++) {
+    for (let xx = minX; xx <= maxX; xx++) {
+      const d = Math.hypot(xx-cx, yy-cy);
+      if (d > radius) continue;
+      const add = (1 - d/radius) * (intensity/100);
+      const i = idx(xx,yy);
+      lightField[i] = Math.min(CAP, lightField[i] + add);
+    }
+  }
+}
+function addSearchlightCone(playerX, playerY, apexHalfWidth, baseHalfWidth, intensity, bloomRadius, bloomIntensity) {
+  const apexY = 1;
+  const span = Math.max(1, playerY - apexY);
+  const add = intensity / 100;
+  for (let y = Math.ceil(apexY); y <= Math.floor(playerY); y++) {
+    const t = (y - apexY) / span;
+    const halfW = apexHalfWidth + (baseHalfWidth - apexHalfWidth) * t;
+    const minX = Math.max(0, Math.round(playerX - halfW));
+    const maxX = Math.min(GRID_W-1, Math.round(playerX + halfW));
+    for (let x = minX; x <= maxX; x++) {
+      const i = idx(x, y);
+      lightField[i] = Math.min(CAP, lightField[i] + add);
+    }
+  }
+  addRadialBloom(playerX, playerY, bloomRadius, bloomIntensity);
+}
+function decayLightField() {
+  for (let i = 0; i < lightField.length; i++) lightField[i] *= DECAY;
+}
+
+// ============================================================
+// Generic creature system (used by all three levels)
+// ============================================================
+const DISCOVER_THRESHOLD = 2.6;
+const CREATURE_LIGHT_RADIUS = 20;
+
+function drawCreatureGeneric(targetCtx, bgx, bgy, pixelData, type, discovered, alpha) {
+  const data = pixelData[type];
+  const w = data.w, h = data.h;
+  const offsetX = Math.floor(w/2);
+  targetCtx.globalAlpha = alpha;
+  for (let y=0;y<h;y++) {
+    const row = data.rows[y];
+    for (let x=0;x<w;x++) {
+      const c = row[x];
+      if (!c) continue;
+      targetCtx.fillStyle = discovered ? c : darkenColor(c, 0.4);
+      const wx = bgx + (x-offsetX), wy = bgy + (y-(h-1));
+      targetCtx.fillRect(wx*CELL, wy*CELL, CELL, CELL);
+    }
+  }
+  targetCtx.globalAlpha = 1;
+}
+
+function updateCreatures(level, t) {
+  for (const a of level.creatures) {
+    if (a.discovered) {
+      const h = level.pixelData[a.type].h;
+      const lightCY = a.gy - h/2;
+      addSoftLightSource(a.gx, lightCY, CREATURE_LIGHT_RADIUS, 0.18, 30, t, a.gx*0.1);
+      continue;
+    }
+    const b = lightField[idx(Math.round(a.gx), Math.round(a.gy))];
+    if (b > 0.12) {
+      a.exposure += b*0.03;
+      if (a.exposure >= DISCOVER_THRESHOLD) { a.discovered = true; updateProgressLabel(); }
+    }
+  }
+}
+
+function drawCreatures(level, targetCtx, t) {
+  for (const a of level.creatures) {
+    const bgx = Math.round(a.gx), bgy = Math.round(a.gy);
+    if (a.discovered) {
+      const h = level.pixelData[a.type].h;
+      const auraCY = -h/2, auraR = h*0.65;
+      const pulse = 0.5+0.25*Math.sin(t/260+a.gx);
+      fillEllipseLocal(targetCtx, bgx, bgy, 0, auraCY, auraR, auraR, level.auraColors[a.type], pulse*0.35);
+      drawCreatureGeneric(targetCtx, bgx, bgy, level.pixelData, a.type, true, 1);
+    } else {
+      drawCreatureGeneric(targetCtx, bgx, bgy, level.pixelData, a.type, false, 1);
+    }
+  }
+}
+
+function updateProgressLabel() {
+  const level = LEVELS[currentLevelIndex];
+  const found = level.creatures.filter(a=>a.discovered).length;
+  document.getElementById('progressText').textContent = `Awakened ${found} / ${level.creatures.length}`;
+}
+
+let allFoundProgress = 0;
+function updateAllFoundProgress() {
+  const level = LEVELS[currentLevelIndex];
+  if (level.creatures.every(a=>a.discovered)) {
+    if (allFoundProgress < 1 && !nextLevelShown) {
+      nextLevelShown = true;
+      showNextLevelOverlay();
+    }
+    allFoundProgress = Math.min(1, allFoundProgress + 0.0035);
+  }
+}
+
+// ============================================================
+// Player state (generic across levels; each level defines its own
+// movement bounds, light-emission call, and sprite drawing)
+// ============================================================
+const player = { gx: 0, gy: 0, facing: 0 };
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+function updatePlayerPosition() {
+  const level = LEVELS[currentLevelIndex];
+  let dx=0, dy=0;
+  if (keys['w']||keys['arrowup']) dy -= 1;
+  if (keys['s']||keys['arrowdown']) dy += 1;
+  if (keys['a']||keys['arrowleft']) dx -= 1;
+  if (keys['d']||keys['arrowright']) dx += 1;
+  if (dx!==0 && dy!==0) { dx*=0.7071; dy*=0.7071; }
+  const step = SPEED * 0.16;
+  const b = level.bounds;
+  player.gx = Math.max(b.minX, Math.min(b.maxX, player.gx + dx*step));
+  player.gy = Math.max(b.minY, Math.min(b.maxY, player.gy + dy*step));
+  if (dx !== 0 || dy !== 0) player.facing = Math.atan2(dy, dx);
+}
+
+// ============================================================
+// Tunable parameters (bound to settings panel sliders)
+// ============================================================
+let SPEED = 1.0, DECAY = 0.94, RADIUS = 12, INTENSITY = 35, WOBBLE = 0.22, BLOOM_R = 10;
+const speedCtrl = document.getElementById('speedCtrl');
+const decayCtrl = document.getElementById('decayCtrl');
+const radiusCtrl = document.getElementById('radiusCtrl');
+const intensityCtrl = document.getElementById('intensityCtrl');
+const wobbleCtrl = document.getElementById('wobbleCtrl');
+const bloomCtrl = document.getElementById('bloomCtrl');
+speedCtrl.addEventListener('input', e => SPEED = parseFloat(e.target.value));
+decayCtrl.addEventListener('input', e => DECAY = parseFloat(e.target.value));
+radiusCtrl.addEventListener('input', e => RADIUS = parseFloat(e.target.value));
+intensityCtrl.addEventListener('input', e => INTENSITY = parseFloat(e.target.value));
+wobbleCtrl.addEventListener('input', e => WOBBLE = parseFloat(e.target.value));
+bloomCtrl.addEventListener('input', e => BLOOM_R = parseFloat(e.target.value));
+
+document.getElementById('settingsToggle').addEventListener('click', () => {
+  document.getElementById('settingsPanel').classList.toggle('open');
+});
+
+const BIRD_PIXEL_DATA = {"robin":{"w":20,"h":18,"rows":[[null,null,null,"#2a2b38","#010102","#010102","#010102","#010102","#010102",null,null,null,null,null,null,null,null,null,null,null],[null,null,null,"#255992","#255992","#235a92","#255992","#255992","#255992","#010102",null,null,null,null,null,null,null,null,null,null],[null,"#2a2b38","#2a2b38","#2a2b38","#2a2b38","#bc945c","#255992","#255992","#f3f2ee","#f3f2ee","#010102","#010102",null,null,null,null,null,null,null,null],[null,null,null,"#cdb9a4","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#235a92","#2a2b38","#010102",null,null,null,null,null,null],[null,null,null,"#2a2b38","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#255992","#255992","#255992","#255992","#000205",null,null,null,null,null],[null,null,null,"#2a2b38","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#b7c5df","#255992","#255992","#255992","#255992","#255992","#010102",null,null,null,null],[null,null,null,"#2a2b38","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#b7c5df","#b7c5df","#255992","#255992","#255992","#255992","#255992","#255992","#000205",null,null,null],[null,null,null,"#2a2b38","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#235a92","#235a92","#255992","#255992","#255992","#000205",null,null],[null,null,null,null,"#010102","#f3f2ee","#f3f2ee","#f3f2ee","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#255992","#235a92","#255992","#255992","#000205",null,null],[null,null,null,null,"#010102","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#235a92","#255992","#235a92","#255992","#010102",null],[null,null,null,null,null,"#010102","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#255992","#255992","#000205",null],[null,null,null,null,null,null,null,null,"#010102","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#b7c5df","#235a92","#010102"],[null,null,null,null,null,null,null,null,null,"#010102","#010102","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#b7c5df","#b7c5df","#b7c5df","#010102"],[null,null,null,null,null,null,null,null,null,null,null,"#010102","#f3f2ee","#f3f2ee","#f3f2ee","#f3f2ee","#faf9f8","#b7c5df","#b7c5df","#010102"],[null,null,null,null,null,null,null,null,null,null,null,"#010102","#2a2b38","#010102","#f3f2ee","#010102","#010102","#f3f2ee","#010102","#010102"],[null,null,null,null,null,null,null,null,null,"#000205","#bc945c","#010102","#fdffff","#010102","#bc945c","#010102",null,null,null,null],[null,null,null,null,null,null,"#010102","#010102","#000205","#bc945c","#010102","#010102","#000205","#010102","#bc945c","#000205","#010102",null,null,null],[null,null,null,null,null,"#010102","#bc945c","#bc945c","#bc945c","#010102","#bc945c","#bc945c","#bc945c","#bc945c","#010102","#bc945c","#bc945c",null,null,null]]},"quail":{"w":20,"h":13,"rows":[[null,null,null,null,null,"#000000","#000000","#000000",null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,"#a48667","#a48667","#8d6650","#000000","#000000",null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#000000","#a48667","#a48667","#a48667","#a48667","#3f2c25","#8d6650","#000000","#000000",null,null,null,null,null,null,null],[null,null,null,"#322d2e","#3f2c25","#a48667","#a48667","#a48667","#3f2c25","#9c755a","#8d6650","#b3a396","#3f2c25","#000000",null,null,null,null,null,null],[null,null,"#322d2e",null,null,"#a48667","#a48667","#8d6650","#a48667","#8d6650","#9c755a","#8d6650","#b3a396","#8d6650","#b3a396","#000000",null,null,null,null],[null,"#322d2e",null,null,null,"#a48667","#9c755a","#a48667","#a48667","#9c755a","#8d6650","#b3a396","#8d6650","#3f2c25","#b3a396","#8d6650","#000000",null,null,null],["#a48667",null,null,null,null,"#3f2c25","#8d6650","#a48667","#a48667","#9c755a","#9c755a","#9c755a","#795642","#a78b6d","#795642","#b3a396","#795642","#110704",null,null],[null,null,null,null,null,"#000000","#8d6650","#a48667","#a48667","#a48667","#b3a396","#b3a396","#b3a396","#9c755a","#8d6650","#8d6650","#3f2c25","#9c755a",null,null],[null,null,null,null,null,null,"#000000","#a48667","#a48667","#a48667","#a48667","#3f2c25","#3f2c25","#b3a396","#b3a396","#3f2c25","#8d6650","#8d6650","#000000",null],[null,null,null,null,null,null,null,null,"#000000","#000000","#a48667","#a48667","#a48667","#a48667","#a48667","#a48667","#a48667","#000000","#000000",null],[null,null,null,null,null,null,null,null,null,null,"#000000","#000000","#000000","#000000","#000000","#000000","#000000",null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#322d2e",null,null,null,null,null],[null,null,null,null,null,null,null,"#322d2e","#322d2e","#322d2e","#322d2e",null,"#322d2e","#322d2e",null,null,null,null,null,null]]},"magpie":{"w":25,"h":30,"rows":[[null,null,null,null,"#000000","#020305","#caceda","#caceda","#caceda",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,"#786976","#000000","#000000","#000000","#000003","#000003","#000003","#caceda",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,"#273761","#020305","#000000","#000003","#000000","#786976","#000000","#000000","#273761","#caceda",null,null,null,null,null,null,null,null,null,null,null,null,null,null],["#f3f2ef","#020305","#020305","#020305","#000000","#000000","#786976","#000000","#000000","#000000","#caceda",null,null,null,null,null,null,null,null,null,null,null,null,null,null],["#786976","#786976","#786976","#786976","#000003","#000000","#000000","#000000","#000000","#000000","#caceda",null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,"#786976","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#caceda","#020305","#020305",null,null,null,null,null,null,null,null,null,null,null],[null,null,"#786976","#000000","#000000","#000000","#000000","#020305","#586583","#586583","#586583","#586583","#586583","#586583","#000000",null,null,null,null,null,null,null,null,null,null],[null,null,"#786976","#000000","#000000","#000000","#000000","#586583","#586583","#586583","#586583","#586583","#586583","#586583","#586583","#000003",null,null,null,null,null,null,null,null,null],[null,null,"#786976","#000000","#000000","#000000","#000000","#324884","#324884","#324884","#586583","#586583","#586583","#586583","#586583","#586583","#000000",null,null,null,null,null,null,null,null],[null,null,"#786976","#000000","#000000","#000000","#000003","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#586583","#586583","#586583","#000000",null,null,null,null,null,null,null],[null,null,"#786976","#000000","#000000","#000000","#f3f2ef","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#586583","#586583","#000000",null,null,null,null,null,null],[null,null,null,null,"#000000","#f3f2ef","#f3f2ef","#000003","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#caceda","#000003",null,null,null,null,null],[null,null,null,null,"#000000","#f3f2ef","#f3f2ef","#fafaf9","#000000","#000003","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#324884","#000000",null,null,null,null,null],[null,null,null,null,"#000000","#f3f2ef","#f3f2ef","#f3f2ef","#786976","#786976","#273761","#273761","#273761","#273761","#324884","#324884","#324884","#324884","#324884","#586583","#786976",null,null,null,null],[null,null,null,null,"#000000","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#000003","#000000","#000003","#000205","#3a3c65","#3a3c65","#324884","#324884","#324884","#caceda","#000003",null,null,null,null],[null,null,null,null,null,"#000000","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#000000","#000000","#324884","#324884","#324884","#324884","#000205",null,null,null,null],[null,null,null,null,null,null,"#000000","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#000000","#000000","#324884","#324884","#caceda","#000205","#273761",null,null],[null,null,null,null,null,null,null,"#000000","#000000","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#000000","#000003","#324884","#000205","#273761",null,null],[null,null,null,null,null,null,null,null,null,"#000000","#000000","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#000000","#caceda","#786976","#000000",null],[null,null,null,null,null,null,null,null,null,null,null,"#020305","#000000","#000000","#000000","#000000","#000000","#f3f2ef","#f3f2ef","#f3f2ef","#f3f2ef","#020305","#020305","#000000",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#000000","#000000","#f3f2ef","#f3f2ef","#324884","#273761","#020305",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#000000","#324884","#324884","#324884","#324884","#020305"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#000003","#324884","#273761","#000003",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#020305","#324884","#273761","#000000",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#000205","#324884","#273761","#020305","#caceda"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#000003","#3a3c65","#324884","#324884","#000000"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#020305","#020305","#324884","#000000"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#020305","#020305","#324884","#000000"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#020305","#020305","#324884","#000000"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#020305","#020305","#324884","#000000"]]},"bullfinch":{"w":20,"h":17,"rows":[[null,null,"#000000","#000000","#000000","#000000","#000000","#000000",null,null,null,null,null,null,null,null,null,null,null,null],[null,"#010102","#000000","#000000","#000000","#000000","#000000","#010102","#000000",null,null,null,null,null,null,null,null,null,null,null],["#6b4341","#6b4341","#0d0003","#000000","#0a0707","#6b4341","#d25644","#d25644","#adabac","#010102",null,null,null,null,null,null,null,null,null,null],["#6b4341","#6b4341","#010102","#0d0003","#0a0707","#6b4341","#de4f3e","#d25644","#cacaca","#010102",null,null,null,null,null,null,null,null,null,null],[null,"#010102","#010102","#d25644","#de4f3e","#de4f3e","#de4f3e","#adabac","#cacaca","#cacaca","#000000",null,null,null,null,null,null,null,null,null],[null,"#010102","#de4f3e","#de4f3e","#de4f3e","#e14d40","#cacaca","#adabac","#cacaca","#adabac","#cacaca","#000000",null,null,null,null,null,null,null,null],[null,"#010102","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#e14d40","#adabac","#adabac","#010102","#adabac","#000000",null,null,null,null,null,null,null],[null,"#010102","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#e14d40","#010102","#adabac","#010102","#010102","#000000",null,null,null,null,null,null],[null,"#010102","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#000002","#010102","#010102","#000000","#000000",null,null,null,null,null],[null,"#010102","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#e14d40","#de4f3e","#010102","#010102","#000000","#000000","#000000","#adabac",null,null,null],[null,null,"#010102","#d25644","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#de4f3e","#ffffff","#faffff","#ffffff","#000000","#000000",null,null,null,null,null],[null,null,null,"#0a0707","#6b4341","#de4f3e","#de4f3e","#e14d40","#ffffff","#fdfcfd","#ffffff","#ffffff","#000002","#000002","#000000","#000000","#adabac",null,null,null],[null,null,null,null,"#adabac","#0d0003","#0d0003","#0d0003","#010102","#010102","#010102","#010102",null,null,"#0a0707","#000000","#010102","#010102",null,null],[null,null,null,null,"#fdfcfd","#cacaca","#cacaca","#cacaca","#cacaca","#cacaca","#cacaca","#cacaca",null,null,"#cacaca","#000000","#000000","#000000","#0a0707",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#010102","#010102","#000000","#000000",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#adabac","#000000","#000000","#000000"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#010102","#010102"]]},"kingfisher":{"w":20,"h":15,"rows":[[null,null,null,null,null,null,"#010204","#000200","#000200","#000200","#000200","#000200","#000000",null,null,null,null,null,null,null],[null,"#010204","#010204","#010204","#010204","#010204","#2f80bf","#2b89ce","#2b89ce","#2397d4","#10b1ed","#2397d4","#2397d4","#000000",null,null,null,null,null,null],["#010204","#e5843c","#e5843c","#e5843c","#e5843c","#e5843c","#e5843c","#fffdff","#010204","#594c5d","#2397d4","#10b1ed","#2397d4","#10b1ed","#000000",null,null,null,null,null],["#000000","#000200","#000200","#000200","#000200","#000200","#fffdff","#fffdff","#e5843c","#e5843c","#e5843c","#e5843c","#fffdff","#fffdff","#000000",null,null,null,null,null],[null,null,null,null,null,null,"#010204","#fffdff","#e5843c","#968272","#2f80bf","#2f80bf","#2b89ce","#10b1ed","#10b1ed","#000200",null,null,null,null],[null,null,null,null,null,null,"#000000","#968272","#594c5d","#2f80bf","#2f80bf","#2f80bf","#2b89ce","#2397d4","#10b1ed","#2397d4","#010204",null,null,null],[null,null,null,null,null,null,"#000000","#e5843c","#2f80bf","#2397d4","#2397d4","#2f80bf","#2f80bf","#2f80bf","#2397d4","#10b1ed","#2f80bf","#061622",null,null],[null,null,null,null,null,null,"#000000","#e5843c","#e5843c","#968272","#2b89ce","#2f80bf","#2f80bf","#2f80bf","#2f80bf","#2397d4","#10b1ed","#000000",null,null],[null,null,null,null,null,null,"#000000","#e5843c","#e5843c","#968272","#2b89ce","#2f80bf","#2f80bf","#2397d4","#2f80bf","#2b89ce","#10b1ed","#2f80bf","#594c5d",null],[null,null,null,null,null,null,"#000000","#e5843c","#e5843c","#968272","#2f80bf","#2397d4","#2f80bf","#2397d4","#2f80bf","#2b89ce","#10b1ed","#10b1ed","#000000",null],[null,null,null,null,null,null,"#000000","#968272","#e5843c","#e5843c","#e5843c","#061622","#2f80bf","#2f80bf","#2f80bf","#2397d4","#2f80bf","#10b1ed","#061622",null],[null,null,null,null,null,null,null,"#061622","#e5843c","#e5843c","#e5843c","#e5843c","#061622","#2397d4","#2b89ce","#10b1ed","#061622","#10b1ed","#10b1ed","#000200"],[null,null,null,null,null,null,null,null,"#010204","#594c5d","#e5843c","#e5843c","#e5843c","#e5843c","#061622","#061622","#061622","#2b89ce","#10b1ed","#000200"],[null,null,null,null,null,null,null,null,null,"#594c5d","#010204","#e5843c","#e5843c","#e5843c","#e5843c","#e5843c","#2f80bf","#000200","#10b1ed","#000000"],[null,null,null,null,null,null,null,null,null,null,null,"#000200","#000200","#000200","#000200","#010204","#010204",null,"#000000","#000200"]]}};const FISH_PIXEL_DATA = {"dolphin":{"w":20,"h":15,"rows":[[null,null,null,null,null,null,null,null,null,null,"#263147","#263147","#263147","#647c9d",null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,"#233149","#ccdef2","#75a6e2","#78a6e0","#647c9d",null,null,null,null,null,null],[null,null,null,null,null,"#ccdef2","#25344b","#25344b","#25344b","#ccdef2","#83b0e9","#76a5e4","#263147",null,null,null,null,null,null,null],[null,null,null,null,"#233149","#25344b","#83b0e9","#83b0e9","#83b0e9","#76a5e4","#76a6e4","#76a5e4","#233149","#647c9d",null,null,null,null,null,null],[null,null,null,"#263147","#83b0e9","#83b0e9","#76a6e4","#76a6e4","#75a6e2","#76a6e4","#76a6e4","#75a6e2","#83b0e9","#78a6e0","#ccdef2",null,null,null,null,null],[null,null,"#263147","#83b0e9","#75a6e2","#78a6e0","#76a5e4","#76a6e4","#76a6e4","#76a6e4","#76a5e4","#76a6e4","#76a6e4","#83b0e9","#25344b",null,null,null,null,null],[null,null,"#263147","#76a5e4","#78a6e0","#78a6e0","#76a5e4","#76a6e4","#76a6e4","#76a6e4","#76a6e4","#76a5e4","#76a5e4","#76a6e4","#83b0e9","#25344b",null,null,null,null],[null,"#647c9d","#647c9d","#76a6e4","#78a6e0","#647c9d","#ccdef2","#78a6e0","#76a6e4","#76a6e4","#76a5e4","#ccdef2","#ccdef2","#76a5e4","#76a6e4","#83b0e9","#233149",null,null,null],["#263147","#fbfefe","#fbfefe","#fbfefe","#fbfefe","#fffffd","#ffffff","#25344b","#76a6e4","#78a6e0","#25344b","#fbfefe","#ffffff","#fbfefe","#83b0e9","#76a5e4","#78a6e0","#263147",null,null],[null,"#233149","#263147","#233149","#263147","#263147","#263147","#25344b","#25344b","#75a6e2","#78a6e0","#263147","#233149","#647c9d","#fbfefe","#78a6e0","#76a5e4","#263147",null,null],[null,null,null,null,null,"#ccdef2","#647c9d","#25344b",null,"#233149","#76a5e4","#25344b",null,"#ccdef2","#233149","#fbfefe","#78a6e0","#263147",null,null],[null,null,null,null,null,null,"#647c9d","#25344b",null,null,"#233149","#233149",null,null,null,"#233149","#76a5e4","#75a6e2","#263147",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#25344b","#78a6e0","#76a6e4","#78a6e0","#75a6e2","#263147"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#25344b","#78a6e0","#263147","#263147","#75a6e2","#263147"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#25344b","#25344b",null,null,"#233149","#263147"]]},"turtle":{"w":20,"h":13,"rows":[[null,null,null,null,null,null,null,null,null,"#67624c","#33392b","#33392b","#33392b","#33392b","#33392b","#33392b",null,null,null,null],[null,null,null,null,null,null,null,null,"#3d4935","#8e815c","#8e815c","#646f41","#646f41","#646f41","#9cac78","#646f41","#33392b",null,null,null],[null,null,"#40503c","#40503c","#40503c","#40503c",null,"#33392b","#65774b","#646f41","#8e815c","#9cac78","#646f41","#646f41","#9cac78","#646f41","#65774b","#33392b",null,null],[null,"#40503c","#c3dfaa","#c3dfaa","#c3dfaa","#c3dfaa","#33392b","#9cac78","#65774b","#646f41","#646f41","#65774b","#9cac78","#9cac78","#646f41","#9cac78","#646f41","#646f41","#33392b",null],["#40503c","#cfe9b5","#c3dfaa","#c3dfaa","#c3dfaa","#c3dfaa","#9cac78","#3d4935","#67624c","#646f41","#646f41","#65774b","#9cac78","#646f41","#646f41","#646f41","#9cac78","#646f41","#33392b",null],["#3d4935","#c3dfaa","#c3dfaa","#c3dfaa","#646f41","#c3dfaa","#9cac78","#33392b","#8e815c","#7f6d4d","#646f41","#65774b","#9cac78","#646f41","#646f41","#646f41","#9cac78","#7f6d4d","#67624c","#67624c"],["#3d4935","#c3dfaa","#c3dfaa","#9cac78","#33392b","#c3dfaa","#9cac78","#40503c","#8e815c","#8e815c","#7f6d4d","#7f6d4d","#8e815c","#67624c","#7f6d4d","#7f6d4d","#8e815c","#8e815c","#7f6d4d","#33392b"],["#65774b","#9cac78","#c3dfaa","#8e815c","#40503c","#c3dfaa","#c3dfaa","#65774b","#65774b","#8e815c","#8e815c","#7f6d4d","#7f6d4d","#7f6d4d","#7f6d4d","#7f6d4d","#7f6d4d","#8e815c","#646f41","#67624c"],[null,"#40503c","#c3dfaa","#c3dfaa","#c3dfaa","#c3dfaa","#65774b","#65774b","#65774b","#65774b","#8e815c","#8e815c","#8e815c","#8e815c","#8e815c","#7f6d4d","#9cac78","#33392b","#40503c",null],[null,null,"#40503c","#40503c","#40503c","#40503c","#40503c","#40503c","#c3dfaa","#8e815c","#65774b","#7f6d4d","#7f6d4d","#7f6d4d","#7f6d4d","#33392b","#3d4935","#c3dfaa","#c3dfaa","#3d4935"],[null,null,null,null,null,null,null,"#40503c","#c3dfaa","#cfe9b5","#8e815c","#65774b",null,null,null,null,"#40503c","#40503c","#40503c","#3d4935"],[null,null,null,null,null,null,null,null,"#40503c","#9cac78","#c3dfaa","#9cac78","#40503c",null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,null,"#65774b","#40503c","#40503c","#40503c",null,null,null,null,null,null,null]]},"octopus":{"w":20,"h":19,"rows":[[null,null,null,null,null,null,null,"#2e1f46","#341b49","#2e1f46","#2e1f46","#2e1f46","#2e1f46",null,null,null,null,null,null,null],[null,null,null,null,null,"#2e1f46","#2e1f46","#b088b6","#b088b6","#b388b6","#b388b6","#b388b6","#694f81","#2e1f46","#2e1f46",null,null,null,null,null],[null,null,null,"#c798bd","#2e1f46","#b088b6","#b088b6","#ffffff","#ffffff","#b388b6","#b388b6","#b388b6","#aa83c1","#b088b6","#aa83c1","#2e1f46","#f0e9f2",null,null,null],[null,null,null,"#c798bd","#341b49","#b088b6","#f0e9f2","#feffff","#c798bd","#b988b9","#b388b6","#b388b6","#b388b6","#b388b6","#aa83c1","#341b49","#c798bd",null,null,null],[null,null,null,"#c798bd","#341b49","#b088b6","#ffffff","#ffffff","#b388b5","#b388b6","#b388b6","#b388b6","#b388b6","#b388b5","#aa83c1","#3c2753","#c798bd",null,null,null],[null,null,"#3c2753","#3c2753","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b5","#b988b9","#aa83c1","#3c2753","#3c2753",null,null],[null,null,"#3c2753","#3c2753","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#aa83c1","#3c2753","#3c2753",null,null],[null,null,"#3c2753","#3c2753","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#b388b6","#aa83c1","#3c2753","#3c2753",null,null],[null,null,"#3c2753","#3c2753","#b388b6","#b088b6","#341b49","#b388b6","#b388b5","#b388b6","#b388b5","#b088b6","#2e1f46","#b088b6","#b388b6","#aa83c1","#3c2753","#3c2753",null,null],[null,null,"#694f81","#3c2753","#aa83c1","#b088b6","#341b49","#b388b6","#b388b5","#694f81","#b388b6","#b388b5","#2e1f46","#b088b6","#aa83c1","#aa83c1","#3c2753","#3c2753",null,null],[null,"#2e1f46","#f0e9f2","#c798bd","#341b49","#c798bd","#c798bd","#b388b6","#b388b5","#b388b6","#b388b5","#b388b6","#c798bd","#c798bd","#aa83c1","#341b49","#c798bd","#f0e9f2","#2e1f46",null],["#2e1f46","#c798bd","#3c2753","#2e1f46","#341b49","#aa83c1","#b388b5","#b388b5","#b388b6","#b388b6","#b388b6","#b388b5","#b388b5","#aa83c1","#694f81","#341b49","#2e1f46","#3c2753","#c798bd","#2e1f46"],["#2e1f46","#c798bd","#c798bd","#b988b9","#694f81","#aa83c1","#694f81","#b988b9","#b388b6","#b388b6","#b388b6","#b388b6","#694f81","#aa83c1","#694f81","#aa83c1","#c798bd","#c798bd","#c798bd","#2e1f46"],[null,"#341b49","#341b49","#341b49","#341b49","#aa83c1","#aa83c1","#aa83c1","#b388b5","#aa83c1","#b388b6","#aa83c1","#aa83c1","#b088b6","#aa83c1","#341b49","#341b49","#341b49","#341b49",null],[null,"#2e1f46","#2e1f46","#3c2753","#b388b6","#b088b6","#341b49","#c798bd","#694f81","#341b49","#b388b6","#aa83c1","#341b49","#b088b6","#c798bd","#694f81","#3c2753","#3c2753",null,null],["#f0e9f2","#3c2753","#3c2753","#694f81","#b988b9","#b088b6","#341b49","#c798bd","#694f81","#2e1f46","#aa83c1","#b988b9","#341b49","#b088b6","#c798bd","#694f81","#694f81","#694f81","#c798bd",null],["#2e1f46","#b088b6","#b088b6","#b988b9","#c798bd","#341b49","#341b49","#c798bd","#694f81","#2e1f46","#694f81","#c798bd","#341b49","#2e1f46","#f0e9f2","#c798bd","#c798bd","#b088b6","#2e1f46",null],[null,"#2e1f46","#2e1f46","#2e1f46","#2e1f46","#341b49","#c798bd","#f0e9f2","#2e1f46",null,"#2e1f46","#f0e9f2","#c798bd","#2e1f46","#2e1f46","#2e1f46","#2e1f46","#3c2753",null,null],[null,null,null,null,null,null,"#2e1f46","#2e1f46",null,null,null,"#2e1f46","#2e1f46",null,null,null,null,null,null,null]]},"flatfish":{"w":20,"h":15,"rows":[[null,null,null,null,null,null,null,"#0a0606","#2e272d","#0a0606","#0a0606",null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,"#0a0606","#9f7c61","#aa8a65","#9c7153","#aa8965","#0a0606",null,null,null,null,null,null,null,null],[null,null,null,null,null,"#0a0606","#a88160","#aa8965","#aa8965","#9c7153","#9c7153","#aa8965","#2e272d",null,null,null,null,null,null,null],[null,null,null,"#0a0606","#9f7c61","#794c32","#9c7153","#9f7c61","#9f7c61","#9c7153","#9f7c61","#794c32","#794c32","#9f7c61",null,null,null,null,null,null],[null,null,null,"#aa8965","#794c32","#9c7153","#a88160","#aa8a65","#aa8a65","#aa8a65","#aa8965","#9c7153","#9c7153","#794c32","#2e272d",null,null,null,null,null],[null,null,null,"#794c32","#9c7153","#aa8a65","#aa8965","#9c7153","#aa8965","#aa8a65","#aa8a65","#aa8a65","#9c7153","#9c7153","#aa8a65","#2e272d",null,"#2e272d","#0a0606",null],[null,null,"#0a0606","#0a0606","#fffffd","#aa8965","#82593e","#794c32","#794c32","#aa8965","#aa8965","#9f7c61","#aa8965","#aa8965","#794c32","#2e272d",null,"#aa8a65","#aa8965","#2e272d"],["#9f7c61","#794c32","#9f7c61","#dcd0c4","#aa8a65","#aa8965","#9c7153","#9c7153","#82593e","#9c7153","#9c7153","#9c7153","#9c7153","#9c7153","#82593e","#413532","#413532","#9c7153","#a88160","#2e272d"],["#dcd0c4","#794c32","#794c32","#0a0606","#aa8a65","#aa8a65","#82593e","#9c7153","#9f7c61","#794c32","#aa8965","#aa8965","#aa8a65","#aa8965","#aa8965","#aa8965","#aa8965","#aa8965","#9c7153","#2e272d"],["#2e272d","#aa8a65","#aa8a65","#aa8a65","#aa8a65","#aa8965","#794c32","#aa8a65","#9f7c61","#794c32","#aa8a65","#aa8a65","#aa8a65","#9c7153","#aa8a65","#2e272d","#0a0606","#aa8965","#aa8a65","#2e272d"],[null,"#2e272d","#0a0606","#aa8965","#aa8965","#794c32","#9f7c61","#794c32","#794c32","#aa8a65","#aa8a65","#aa8a65","#aa8a65","#aa8965","#794c32","#2e272d",null,"#aa8a65","#aa8965","#2e272d"],[null,null,null,"#794c32","#794c32","#794c32","#aa8a65","#aa8a65","#aa8a65","#aa8a65","#9c7153","#aa8a65","#aa8965","#9f7c61","#aa8965","#2e272d",null,"#2e272d","#2e272d",null],[null,null,null,null,"#2e272d","#aa8965","#794c32","#794c32","#794c32","#794c32","#794c32","#794c32","#9f7c61","#aa8a65",null,null,null,null,null,null],[null,null,null,null,"#0a0606","#aa8965","#0a0606","#aa8965","#9c7153","#aa8965","#aa8965","#9c7153","#aa8965","#2e272d",null,null,null,null,null,null],[null,null,null,null,null,"#2e272d","#dcd0c4","#2e272d","#2e272d","#2e272d","#2e272d","#2e272d","#2e272d",null,null,null,null,null,null,null]]},"crab":{"w":20,"h":16,"rows":[[null,null,null,null,null,null,"#904939","#904939",null,null,null,null,"#7e4137","#904939",null,null,null,null,null,null],[null,null,null,null,null,"#904939","#d76a51",null,null,null,null,null,null,"#d76a51","#7e3f39",null,null,null,null,null],[null,null,null,null,"#904939","#d76a51","#813f38","#7e4137",null,null,null,null,"#813f38","#7e4137","#d96851","#904939",null,null,null,null],[null,null,null,"#813f38","#d76a51","#d76a51","#7e4137",null,null,null,null,null,null,"#7e4137","#d76a51","#d96851","#904939",null,null,null],[null,null,null,"#813f38","#a53333","#7e4137",null,null,"#774138",null,null,"#774138",null,null,"#813f38","#a53333","#813f38",null,null,null],[null,null,null,null,"#813f38","#d96851","#7e4137",null,null,"#7e4137","#7e4137",null,null,"#813f38","#d76a51","#7e3f39",null,null,null,null],[null,"#813f38","#813f38","#813f38","#fefcfe","#7e3f39","#a53333",null,"#7e3f39","#d96851","#d76a51","#774138","#a53333","#a53333","#813f38","#fffffc","#813f38","#7e3f39","#7e3f39",null],["#7e4137","#d76a51","#813f38","#d76a51","#7e3f39","#fefefe","#813f38","#7e4137","#e0976d","#d96851","#d76a51","#a53333","#7e4137","#774138","#fffffc","#813f38","#d76a51","#7e4137","#d76a51","#7e4137"],["#7e4137","#904939","#fdfffe","#7e4137","#d96851","#813f38","#e0976d","#d96851","#d96851","#d76a51","#d96851","#d76a51","#d76a51","#a53333","#813f38","#d96851","#904939","#fefcfe","#904939","#7e4137"],[null,"#813f38","#7e3f39","#813f38","#d96851","#7e4137","#e0976d","#d96851","#e0976d","#d96851","#a53333","#d96851","#a53333","#a53333","#813f38","#d96851","#774138","#813f38","#7e3f39",null],[null,"#7e4137","#e0976d","#d76a51","#7e4137","#7e4137","#d96851","#e0976d","#d96851","#e0976d","#a53333","#d76a51","#d96851","#a53333","#774138","#7e4137","#d76a51","#e0976d","#774138",null],["#813f38","#d76a51","#7e4137","#7e4137","#d76a51","#7e4137","#d96851","#d96851","#d96851","#d96851","#a53333","#d96851","#a53333","#a53333","#774138","#d76a51","#7e4137","#7e4137","#d76a51","#7e3f39"],["#7e4137","#a53333",null,null,"#7e3f39","#d76a51","#774138","#d96851","#a53333","#d96851","#d76a51","#a53333","#d96851","#774138","#d76a51","#7e3f39",null,null,"#a53333","#813f38"],["#774138","#7e4137",null,"#813f38","#d76a51","#813f38",null,"#7e4137","#7e4137","#7e4137","#7e4137","#7e4137","#7e4137",null,"#774138","#d76a51","#7e4137",null,"#7e4137","#7e4137"],[null,"#7e3f39",null,"#7e3f39","#904939",null,null,null,null,null,null,null,null,null,null,"#813f38","#7e4137",null,"#774138",null],[null,null,null,null,"#904939","#7e3f39",null,null,null,null,null,null,null,null,"#7e3f39","#774138",null,null,null,null]]},"lobster":{"w":20,"h":14,"rows":[[null,null,null,null,null,null,null,"#804135",null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,"#7c4138",null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,"#8a4f3c",null,null,null,null,null,"#864133","#864133","#804135","#864133","#714440",null,null,null,null],[null,null,null,"#714440","#804135","#7c4138","#714440",null,"#7c4138","#e8bc96","#d68355","#d68355","#d68355","#d68355","#8a4f3c","#e8bc96","#d26853","#714440",null,null],[null,null,"#864133","#e8bc96","#804135","#d26853","#d26853","#804135","#e8bc96","#d68355","#e8bc96","#fdfffe","#fffffc","#d68355","#d26853","#8a4f3c","#d26853","#e8bc96","#804135",null],[null,"#7c4138","#d68355","#d26853","#d26853","#7c4138","#804135","#d68355","#d68355","#d68355","#d68355","#893a32","#d26853","#893a32","#d68355","#8a4f3c","#d26853","#d26853","#804135",null],["#804135","#d68355","#714440","#d26853","#7c4138","#8a4f3c","#d26853","#d68355","#d68355","#d68355","#8a4f3c","#864133","#d26853","#d26853","#8a4f3c","#714440","#714440","#d26853","#8a4f3c",null],["#804135",null,"#714440","#fffaf7","#8a4f3c",null,null,"#864133","#864133","#804135","#8a4f3c","#864133","#893a32","#d68355","#804135","#8a4f3c",null,"#7c4138","#d68355","#804135"],[null,null,null,"#714440",null,null,null,null,null,"#804135","#d68355","#804135","#fffaf7","#7c4138","#fdfffe","#7c4138",null,null,"#804135","#7c4138"],[null,null,null,"#fffaf7",null,null,null,"#804135","#804135","#d68355","#d26853","#804135","#fffaf7","#7c4138","#8a4f3c",null,"#714440",null,null,null],[null,null,"#714440",null,"#804135","#893a32","#864133","#d68355","#d68355","#8a4f3c","#8a4f3c",null,"#714440",null,"#7c4138",null,"#714440",null,null,null],[null,null,null,null,"#8a4f3c","#893a32","#d26853","#d26853","#893a32","#893a32","#fffaf7",null,"#714440",null,null,null,null,null,null,null],[null,null,null,"#714440","#d26853","#d26853","#d26853","#d26853","#7c4138",null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#7c4138","#804135","#804135","#714440",null,null,null,null,null,null,null,null,null,null,null,null]]},"lionfish":{"w":20,"h":14,"rows":[[null,null,null,null,null,null,"#cb9d8b",null,null,"#bb7a6a",null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,"#bb7a6a","#dfc7c0",null,"#bb7a6a","#fffffc",null,"#cb9d8b",null,null,null,null,null,null,null,null],[null,null,null,"#faeee4","#876559","#faeee4","#876559","#833d37","#876559","#faeee4","#faeee4","#cb9d8b","#faeee4","#876559",null,null,null,null,null,null],[null,null,null,"#bb7a6a","#784238","#fffffc","#5e3d38","#42221e","#cb9d8b","#42221e","#42221e","#fdfffd","#5e3d38","#dfc7c0","#5e3d38",null,null,null,null,null],[null,null,null,"#42221e","#bb7a6a","#784238","#876559","#833d37","#784238","#bb7a6a","#42221e","#876559","#bb7a6a","#cb9d8b","#5e3d38",null,null,"#5e3d38",null,null],[null,null,null,"#dfc7c0","#876559","#dfc7c0","#964e43","#fdfffd","#784238","#dfc7c0","#dfc7c0","#5e3d38","#876559","#cb9d8b","#876559","#dfc7c0","#876559","#dfc7c0","#876559","#dfc7c0"],[null,null,"#784238","#42221e","#faeee4","#faeee4","#cb9d8b","#42221e","#cb9d8b","#cb9d8b","#faeee4","#fffdfd","#784238","#bb7a6a","#833d37","#bb7a6a","#bb7a6a","#faeee4","#fdfffd","#876559"],[null,"#784238","#faeee4","#42221e","#bb7a6a","#faeee4","#964e43","#964e43","#964e43","#964e43","#833d37","#784238","#784238","#bb7a6a","#fdfffd","#bb7a6a","#5e3d38","#bb7a6a","#bb7a6a","#5e3d38"],["#784238","#cb9d8b","#faeee4","#833d37","#faeee4","#833d37","#dfc7c0","#833d37","#964e43","#cb9d8b","#dfc7c0","#dfc7c0","#5e3d38","#964e43","#cb9d8b","#833d37","#876559","#dfc7c0","#faeee4","#5e3d38"],[null,"#784238","#784238","#faeee4","#833d37","#cb9d8b","#cb9d8b","#964e43","#833d37","#bb7a6a","#fffffc","#fdfffd","#42221e","#964e43",null,null,"#5e3d38","#faeee4","#876559",null],[null,null,null,"#876559","#42221e","#cb9d8b","#42221e","#42221e","#cb9d8b","#cb9d8b","#964e43","#42221e","#bb7a6a","#dfc7c0","#5e3d38",null,null,"#5e3d38",null,null],[null,null,null,null,null,"#42221e","#784238","#833d37","#42221e","#42221e","#5e3d38","#5e3d38","#bb7a6a","#faeee4","#5e3d38",null,null,null,null,null],[null,null,null,null,null,null,"#876559","#833d37","#cb9d8b","#fffdfd",null,null,null,null,null,null,null,null,null,null],[null,null,null,null,null,null,null,null,"#42221e","#42221e",null,null,null,null,null,null,null,null,null,null]]}};const PARK_PIXEL_DATA = {"cat":{"w":20,"h":18,"rows":[[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#000002","#010000"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#010000","#010000","#010000"],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#010000","#010000",null],[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,"#010000","#000000",null,null],[null,null,"#000002",null,null,null,"#000000","#010000",null,null,null,null,null,null,null,null,"#010000","#000000",null,null],[null,"#010000","#000000","#000000",null,"#000002","#000000","#000002",null,null,"#000000","#000000","#000000","#000000","#000000",null,"#010000","#000000",null,null],[null,"#010000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000",null,null],[null,"#010000","#000002","#000000","#000000","#000000","#010000","#000002","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000",null,null],["#000002","#010000","#9b979c","#000002","#000000","#000000","#9b979c","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000002",null,null],["#010000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#010000","#000002",null],[null,"#010000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#010000",null],[null,null,"#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000",null],[null,null,"#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000",null,null],[null,null,"#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000002",null,null],[null,null,null,"#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000","#000000",null,null],[null,null,null,"#000000","#000000","#000000",null,"#000000","#000000","#000002",null,null,null,null,"#000000","#000000","#000000",null,null,null],[null,null,null,"#000000","#000000",null,null,"#000000","#000002",null,null,null,null,null,null,"#000002","#000000",null,null,null],[null,null,null,"#000000","#000000",null,null,"#000002","#000002",null,null,null,null,null,null,null,null,null,null,null]]},"sparrow":{"w":19,"h":22,"rows":[[null,null,null,"#545357","#545357","#545357","#545357","#545357","#545357",null,null,null,null,null,null,null,null,null,null],[null,null,null,"#545357","#545357","#545357","#545357","#545357","#545357",null,null,null,null,null,null,null,null,null,null],[null,null,"#4e4b4e","#c7c3be","#e2d8c5","#e2d8c5","#e2d8c5","#e2d8c5","#e2d8c5","#545357",null,null,null,null,null,null,null,null,null],["#e2d8c5","#8b8072","#8b8072","#e2d8c5","#e2d8c5","#f2e6ca","#4e4b4e","#545357","#e2d8c5","#e2d8c5","#545357","#4e4b4e",null,null,null,null,null,null,null],["#f2e6ca","#e2d8c5","#8b8072","#e2d8c5","#e2d8c5","#8b8072","#4e4b4e","#545357","#f1eeed","#e2d8c5","#545357","#545357",null,null,null,null,null,null,null],[null,null,"#4e4b4e","#f1eeed","#f1eeed","#4e4b4e","#4e4b4e","#8b8072","#f1eeed","#f1eeed","#545357","#545357",null,null,null,null,null,null,null],[null,null,"#4e4b4e","#f1eeed","#f1eeed","#4e4b4e","#f1eeed","#f1eeed","#f1eeed","#f5f1f0","#fafaf0","#fafaf0","#545357",null,null,null,null,null,null],["#c7c3be","#4e4b4e","#f1eeed","#f2f1ee","#f1eeed","#f2f1ee","#f1eeed","#f5f1f0","#fafaf0","#fafaf0","#fafaf0","#faf9e6","#545357",null,null,null,null,null,null],["#c7c3be","#545357","#f3f2ef","#f5f1f0","#f3f2ef","#f7f4ef","#f7f4ef","#f7f4ef","#fafaf0","#fafaf0","#fafaf0","#faf9e6","#8b8072","#c7c3be","#f1eeed",null,null,null,null],["#c7c3be","#545357","#fafaf0","#fafaf0","#fafaf0","#fafaf0","#fafaf0","#fafaf0","#fafaf0","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#545357","#c7c3be",null,null,null,null],["#c7c3be","#545357","#fafaf0","#fafaf0","#fafaf0","#fafaf0","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#f2e6ca","#545357","#c7c3be",null,null,null,null],["#c7c3be","#545357","#e2d8c5","#faf9e6","#fafaf0","#fafaf0","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#f2e6ca","#f2e6ca","#f2e6ca","#545357","#c7c3be",null,null,null,null],["#c7c3be","#545357","#e2d8c5","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#f2e6ca","#f2e6ca","#e2d8c5","#545357","#c7c3be",null,null,null,null],[null,null,"#545357","#e2d8c5","#f2e6ca","#faf9e6","#faf9e6","#faf9e6","#faf9e6","#f2e6ca","#f2e6ca","#f2e6ca","#545357",null,null,null,null,null,null],["#c7c3be","#545357","#545357","#545357","#545357","#545357","#545357","#4e4b4e","#4e4b4e","#4e4b4e","#545357","#4e4b4e","#8b8072","#545357","#c7c3be",null,null,null,null],["#c7c3be","#545357","#c7c3be","#545357","#545357","#e2d8c5","#e2d8c5","#c7c3be","#545357","#e2d8c5","#545357","#545357","#8b8072","#8b8072","#8b8072","#8b8072",null,null,null],["#c7c3be","#545357",null,"#545357","#545357",null,null,"#c7c3be","#545357",null,"#545357","#545357","#8b8072","#8b8072","#545357","#545357",null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,"#545357","#f1eeed","#8b8072","#545357",null,null,null],[null,null,null,null,null,null,null,null,null,null,null,null,"#545357","#f1eeed","#f2e6ca","#f2e6ca","#545357",null,null],[null,null,null,null,null,null,null,null,null,null,null,null,"#c7c3be","#8b8072","#c7c3be","#f2e6ca","#545357",null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,"#545357","#c7c3be","#f2e6ca","#545357",null,null],[null,null,null,null,null,null,null,null,null,null,null,null,null,"#545357","#c7c3be","#faf9e6","#f2e6ca","#4e4b4e","#545357"]]},"jay":{"w":21,"h":22,"rows":[[null,null,null,null,null,null,null,null,null,null,null,"#696771","#696771","#696771","#585358","#696771","#696771","#696771",null,null,null],[null,null,null,null,null,null,null,null,null,null,null,"#585358","#585358","#585358","#585358","#585358","#585358","#585358",null,null,null],[null,null,null,null,null,null,null,null,null,null,"#585358","#271f21","#271f21","#271f21","#271f21","#271f21","#271f21","#271f21","#585358",null,null],[null,null,null,null,null,null,null,null,null,null,"#585358","#271f21","#271f21","#271f21","#271f21","#f7f5f0","#f3efea","#271f21","#eaeae3","#bcb9bd","#eaeae3"],[null,null,null,null,null,null,null,null,"#bcb9bd","#8d878c","#8d878c","#8d878c","#8d878c","#8d878c","#8d878c","#f3efea","#eaeae3","#8d878c","#8d878c","#eaeae3","#eaeae3"],[null,null,null,null,null,null,null,null,"#bcb9bd","#585358","#eaeae3","#eaeae3","#eaeae3","#eaeae3","#eaeae3","#eaeae3","#eaeae3","#eaeae3","#585358",null,null],[null,null,null,null,null,null,null,"#585358","#8d878c","#bcb9bd","#bcb9bd","#bcb9bd","#bcb9bd","#bcb9bd","#f7f5f0","#f7f5f0","#f7f5f0","#f7f5f0","#f7f5f0","#585358","#585358"],[null,null,null,null,null,null,"#585358","#8d878c","#8d878c","#8d878c","#8d878c","#bcb9bd","#bcb9bd","#bcb9bd","#4d5163","#4d5163","#696771","#f2f1ee","#f2f1ee","#585358","#585358"],[null,null,null,null,"#eaeae3","#eaeae3","#585358","#8d878c","#8d878c","#8d878c","#8d878c","#bcb9bd","#bcb9bd","#bcb9bd","#4d5163","#696771","#8d878c","#f2f1ee","#f2f1ee","#585358","#585358"],[null,null,null,null,"#585358","#585358","#8d878c","#8d878c","#8d878c","#8d878c","#eaeae3","#271f21","#271f21","#271f21","#271f21","#f4f0ee","#f2f1ee","#f2f1ee","#f2f1ee","#585358","#585358"],[null,null,null,"#585358","#8d878c","#8d878c","#8d878c","#271f21","#4d5163","#8d878c","#8d878c","#eaeae3","#8d878c","#271f21","#271f21","#f2f1ee","#f2f1ee","#f2f1ee","#585358",null,null],["#8d878c","#696771","#3c373c","#271f21","#585358","#585358","#271f21","#271f21","#3c373c","#3c373c","#8d878c","#8d878c","#4d5163","#271f21","#eaeae3","#f2f1ee","#eaeae3","#696771","#eaeae3",null,null],["#696771","#4d5163","#271f21","#271f21","#4d5163","#4d5163","#271f21","#271f21","#271f21","#271f21","#8d878c","#8d878c","#4d5163","#271f21","#f4f0ee","#f4f0ee","#eaeae3","#585358",null,null,null],[null,null,null,null,"#696771","#585358","#8d878c","#bcb9bd","#8d878c","#585358","#585358","#585358","#585358","#585358","#585358","#585358","#585358","#bcb9bd","#bcb9bd","#eaeae3",null],[null,null,null,null,"#696771","#585358","#8d878c","#bcb9bd","#8d878c","#585358",null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#696771","#585358","#8d878c","#8d878c","#8d878c","#585358",null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#696771","#585358","#8d878c","#585358","#585358","#585358",null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#585358","#585358","#585358","#585358","#585358","#585358",null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#696771","#585358","#585358","#271f21","#3c373c","#585358",null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#696771","#585358","#585358","#271f21","#3c373c","#585358",null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#696771","#585358","#271f21","#585358","#8d878c",null,null,null,null,null,null,null,null,null,null,null,null],[null,null,null,null,"#696771","#585358","#271f21","#585358","#8d878c",null,null,null,null,null,null,null,null,null,null,null,null]]},"bullfinch2":{"w":13,"h":22,"rows":[["#dfe8f0","#dfe8f0","#dfe8f0",null,"#3f3c3c","#3f3c3c","#3f3c3c","#3f3c3c","#3f3c3c",null,null,null,null],["#dfe8f0","#dfe8f0","#dfe8f0",null,"#3b3639","#3b3639","#393737","#3b3437","#393737",null,null,null,null],[null,"#dfe8f0","#dfe8f0","#dfe8f0","#3b3639","#393737","#3b3437","#3b3639","#393737","#3b3437",null,null,null],[null,null,null,"#393737","#393737","#eec1c1","#3f3c3c","#393737","#393737","#3b3639",null,null,null],[null,null,null,"#393737","#393737","#3b3639","#393737","#3b3639","#3f3c3c","#faf8f0","#3b3639","#eceae1",null],[null,"#705b5a","#3f3c3c","#f6f4f1","#faf8f0","#faf8f0","#f6f4f1","#faf8f0","#faf8f0","#3b3639","#3b3639","#eceae1",null],[null,"#705b5a","#3f3c3c","#faf8f0","#f6f4f1","#f6f4f1","#f6f4f1","#f6f4f1","#f6f4f1","#393737","#3f3c3c","#eceae1",null],[null,"#705b5a","#393737","#393737","#393737","#3b3639","#3b3639","#3b3437","#3b3437","#393737","#faf8f0","#3f3c3c","#3b3639"],[null,"#705b5a","#3b3639","#eceae1","#eceae1","#eceae1","#eec1c1","#eceae1","#faf8f0","#3b3639","#f5f2ee","#3f3c3c","#3b3639"],[null,"#705b5a","#3e373a","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#faf8f0","#3b3639","#3b3639","#eceae1",null],[null,"#705b5a","#3e373a","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#f4f0ed","#3f3c3c","#3f3c3c","#3f3c3c"],[null,"#705b5a","#3f3c3c","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#f5f2ee","#393737","#3b3437","#3e373a"],[null,null,null,"#393737","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#eec1c1","#faf8f0","#3b3437","#3b3639","#3e373a"],[null,null,null,null,"#3b3437","#3b3639","#cda1a3","#cda1a3","#cda1a3","#eec1c1","#faf8f0","#3f3c3c","#3b3639"],[null,null,null,"#3b3639",null,null,"#3f3c3c","#3e373a","#cda1a3","#eec1c1","#faf8f0","#3f3c3c","#3e373a"],[null,null,null,null,null,null,null,"#eceae1","#3e373a","#3b3437","#f5f2ee","#3f3c3c","#3f3c3c"],[null,null,null,null,null,null,null,null,"#3f3c3c","#3e373a","#f5f2ee","#3f3c3c","#3b3639"],[null,null,null,null,null,null,null,null,null,"#3b3639","#faf8f0","#3f3c3c","#3f3c3c"],[null,null,null,null,null,null,null,null,null,"#3b3639","#3b3639","#3b3437","#3e373a"],[null,null,null,null,null,null,null,null,null,"#3b3639","#faf8f0","#3f3c3c","#3b3639"],[null,null,null,null,null,null,null,null,null,null,"#3f3c3c","#3f3c3c","#3b3639"],[null,null,null,null,null,null,null,null,null,null,"#393737","#3e373a","#3f3c3c"]]},"owl2":{"w":22,"h":19,"rows":[[null,null,null,null,null,null,null,null,null,null,"#575558","#575558","#575558","#575558","#575558","#575558","#575558","#575558","#575558",null,null,null],[null,null,null,null,null,null,null,null,null,null,"#575558","#525054","#525054","#525054","#525054","#4f4e52","#4f4e52","#4f4e52","#4f4e52",null,null,null],[null,null,null,null,null,null,null,null,null,"#4f4e52","#f8f6f3","#fdfaf4","#fdfaf4","#fdfaf4","#fbfbf3","#fbfbf3","#fafaf2","#fafaf2","#fdfaf4","#525054",null,null],[null,null,null,null,null,null,null,null,null,"#4f4e52","#f8f6f3","#f9f7ec","#d4cbb9","#f9f7ec","#fafaf2","#fbfbf3","#d4cbb9","#f4efea","#fdfaf4","#525054",null,null],[null,null,null,null,null,null,null,"#f1efea","#d4cbb9","#666568","#fdfaf4","#fbfbf3","#d4cbb9","#f9f7ec","#f5f2ee","#f1efea","#d4cbb9","#f4efea","#fbfbf3","#525054",null,null],[null,null,null,null,null,null,null,"#d4cbb9","#4f4e52","#f9f9f2","#f9f9f2","#fafaf2","#f9faf2","#fafaf2","#d4cbb9","#666568","#f9f9f2","#f9f9f2","#f9f9f2","#525054",null,null],[null,null,null,null,null,null,"#525054","#d4cbb9","#f9faf2","#fbfbf3","#fbfbf3","#fbfbf3","#fafaf2","#f9f9f2","#fafaf2","#fdfaf4","#fbfbf3","#fbfbf3","#fdfaf4","#d4cbb9","#525054","#575558"],[null,null,null,null,"#f1efea","#575558","#f1efea","#f5f2ee","#f4efea","#fafaf2","#fafaf2","#f9faf2","#f9faf2","#fafaf2","#fafaf2","#f9faf2","#fafaf2","#fdfaf4","#fdfaf4","#d4cbb9","#4f4e52","#575558"],[null,null,null,null,"#f1efea","#4f4e52","#f9f9f2","#f9f7ec","#f1efea","#f9f9f2","#fafaf2","#f9f9f2","#f9faf2","#f9f9f2","#f9f9f2","#f9faf2","#f9f9f2","#fafaf2","#fafaf2","#d4cbb9","#525054","#575558"],[null,null,null,"#4f4e52","#575558","#d4cbb9","#f9f9f2","#fdfaf4","#fdfaf4","#f9f9f2","#f9faf2","#f9f9f2","#fafaf2","#f9f9f2","#f9f9f2","#fafaf2","#f9f9f2","#f9faf2","#fafaf2","#f4efea","#525054","#575558"],[null,null,null,"#4f4e52","#666568","#f9faf2","#d4cbb9","#f1efea","#fdfaf4","#d4cbb9","#f9f7ec","#f9faf2","#f9faf2","#fafaf2","#f9faf2","#fbfbf3","#fbfbf3","#fafaf2","#fbfbf3","#f4efea","#525054","#575558"],[null,null,"#d4cbb9","#666568","#666568","#f9faf2","#d4cbb9","#f4efea","#f9f7ec","#d4cbb9","#f9f7ec","#f9f9f2","#f9faf2","#f9f9f2","#f9f9f2","#fafaf2","#fafaf2","#fbfbf3","#fbfbf3","#f4efea","#525054","#575558"],[null,null,"#525054","#f9f9f2","#f9faf2","#f9f9f2","#fbfbf3","#f5f1ec","#f4efea","#f9faf2","#f9faf2","#fafaf2","#fafaf2","#f9f9f2","#fafaf2","#f9f9f2","#fafaf2","#fbfbf3","#fdfaf4","#f4efea","#525054","#575558"],[null,null,"#525054","#f4efea","#f4efea","#fafaf2","#f9f9f2","#fafaf2","#f9faf2","#fafaf2","#fafaf2","#fbfbf3","#f9faf2","#fafaf2","#f9faf2","#fbfbf3","#fafaf2","#fbfbf3","#f9f9f2","#4f4e52",null,null],["#666568","#575558","#d4cbb9","#f9f7ec","#f9f7ec","#d4cbb9","#fbfbf3","#fafaf2","#f9faf2","#f9f9f2","#f4efea","#f1efea","#f9faf2","#f9f9f2","#f9faf2","#fbfbf3","#fafaf2","#f9f7ec","#f1efea","#525054",null,null],["#666568","#525054","#d4cbb9","#fdfaf4","#f9f7ec","#d4cbb9","#f9f9f2","#f9f9f2","#f9f9f2","#f9f9f2","#f4efea","#f4efea","#f9f9f2","#fafaf2","#fafaf2","#fafaf2","#f8f6f3","#f4efea","#f4efea","#525054",null,null],["#575558","#525054","#fdfaf4","#f1efea","#f4efea","#fdfaf4","#f8f6f3","#fafaf2","#f9f9f2","#4f4e52","#f8f6f3","#fafaf2","#f4efea","#fdfaf4","#f9f9f2","#f9f9f2","#525054","#d4cbb9","#fafaf2","#525054",null,null],[null,null,"#525054","#4f4e52","#4f4e52","#4f4e52","#4f4e52","#525054","#4f4e52",null,"#525054","#525054","#525054","#4f4e52","#4f4e52","#525054",null,"#666568","#4f4e52",null,null,null],[null,null,"#666568","#666568","#666568","#666568","#666568","#666568","#666568",null,"#666568","#666568","#666568","#666568","#666568","#666568",null,"#666568","#666568",null,null,null]]},"beeeater":{"w":15,"h":22,"rows":[[null,null,null,null,"#545454","#545454","#545454","#545454",null,null,null,null,null,null,null],[null,null,"#a8af93","#545454","#eaeaa9","#eaeaa9","#eaeaa9","#eaeaa9","#565684",null,null,null,null,null,null],["#f3efec","#f3efec","#a8af93","#545454","#eff196","#eff196","#eff196","#eff196","#545454","#f3efec",null,null,null,null,null],["#3c3942","#3c3942","#545454","#545454","#3c3942","#3c3942","#f3efec","#eff196","#eff196","#545454",null,null,null,null,null],[null,null,"#a8af93","#4e4c64","#565684","#3c3942","#3c3942","#3c3942","#eff196","#c1e871","#545454","#f3efec",null,null,null],[null,null,"#a8af93","#545454","#3c3942","#565684","#565684","#3c3942","#eff196","#eff196","#eff196","#545454","#a8af93",null,null],[null,null,"#a8af93","#545454","#3c3942","#3c3942","#3c3942","#eff196","#c1e871","#c1e871","#c1e871","#545454","#a8af93",null,null],[null,null,"#a8af93","#545454","#3c3942","#3c3942","#eff196","#c1e871","#c1e871","#eaeaa9","#c1e871","#c1e871","#a8af93","#545454",null],[null,null,null,"#f3efec","#545454","#eff196","#eff196","#565684","#c1e871","#c1e871","#eaeaa9","#c1e871","#a8af93","#545454",null],[null,null,null,"#f3efec","#545454","#eff196","#eff196","#eaeaa9","#565684","#c1e871","#c1e871","#c1e871","#eff196","#eaeaa9","#545454"],[null,null,null,null,"#eaeaa9","#545454","#eff196","#eff196","#565684","#565684","#c1e871","#c1e871","#c1e871","#eaeaa9","#545454"],[null,null,null,null,null,"#545454","#eff196","#eff196","#565684","#565684","#c1e871","#c1e871","#c1e871","#eaeaa9","#545454"],[null,null,null,null,null,"#545454","#eff196","#eff196","#eff196","#565684","#c1e871","#c1e871","#c1e871","#c1e871","#545454"],[null,null,null,null,null,null,"#545454","#eff196","#eff196","#eff196","#565684","#a8af93","#c1e871","#c1e871","#545454"],[null,null,null,"#f3efec","#545454","#545454",null,"#545454","#545454","#eff196","#eff196","#565684","#565684","#545454","#545454"],[null,null,null,null,null,null,null,null,null,"#545454","#eff196","#c1e871","#a8af93","#545454",null],[null,null,null,null,null,null,null,null,null,null,"#545454","#565684","#4e4c64","#545454",null],[null,null,null,null,null,null,null,null,null,null,"#545454","#565684","#565684","#545454",null],[null,null,null,null,null,null,null,null,null,null,"#545454","#565684","#565684","#545454",null],[null,null,null,null,null,null,null,null,null,null,"#545454","#4e4c64","#565684","#545454",null],[null,null,null,null,null,null,null,null,null,null,"#545454","#565684","#565684","#545454",null],[null,null,null,null,null,null,null,null,null,null,null,"#565684","#545454","#545454",null]]},"wren":{"w":18,"h":22,"rows":[[null,null,null,null,null,null,null,null,null,null,"#74645b","#74645b","#74645b","#74645b","#74645b",null,null,null],[null,null,null,null,null,null,null,null,null,null,"#625a56","#675b56","#625a56","#625a56","#625a56",null,null,null],[null,null,null,null,null,null,null,null,"#675b56","#74645b","#dcb992","#f7f0ea","#f8f4ed","#f8f4ed","#f8f4ed","#dcb992","#dcb992","#dcb992"],[null,null,null,null,null,null,null,null,"#675b56","#74645b","#dcb992","#f7f0ea","#675b56","#74645b","#dcb992","#675b56",null,null],[null,null,null,null,null,null,null,"#74645b","#dcb992","#dcb992","#eee9e4","#e1c29e","#dcb992","#dcb992","#dcb992","#675b56",null,null],[null,null,null,null,null,null,null,"#625a56","#dcb992","#e1c29e","#f7f0ea","#dcb992","#dcb992","#dcb992","#dcb992","#625a56",null,null],[null,null,null,null,null,null,null,"#625a56","#f7f0ea","#f7f0ea","#dcb992","#dcb992","#dcb992","#dcb992","#dcb992","#625a56",null,null],[null,null,null,null,null,null,"#625a56","#dcb992","#dcb992","#dcb992","#dcb992","#dcb992","#dcb992","#dcb992","#dcb992","#625a56",null,null],[null,null,null,null,null,"#eee9e4","#625a56","#dcb992","#9f856e","#74645b","#dcb992","#dcb992","#dcb992","#dcb992","#eee9e4","#625a56",null,null],[null,null,null,null,null,"#eee9e4","#625a56","#dcb992","#74645b","#74645b","#dcb992","#dcb992","#dcb992","#dcb992","#eee9e4","#675b56",null,null],[null,null,null,null,null,"#eee9e4","#625a56","#dcb992","#9f856e","#74645b","#dcb992","#dcb992","#eee9e4","#e1c29e","#675b56",null,null,null],[null,null,null,null,null,"#eee9e4","#625a56","#dcb992","#74645b","#9f856e","#dcb992","#dcb992","#e1c29e","#eee9e4","#625a56",null,null,null],[null,null,null,null,null,"#eee9e4","#675b56","#74645b","#dcb992","#dcb992","#dcb992","#eee9e4","#74645b","#74645b",null,null,null,null],[null,null,null,null,null,null,"#675b56","#74645b","#e1c29e","#dcb992","#dcb992","#eee9e4","#74645b","#74645b",null,null,null,null],[null,null,null,null,"#675b56","#625a56","#625a56","#625a56","#625a56","#625a56","#675b56","#625a56",null,null,"#625a56","#625a56",null,null],[null,null,null,"#625a56","#74645b","#74645b","#625a56",null,null,null,null,null,null,null,null,null,null,null],[null,null,"#675b56","#74645b","#675b56","#74645b",null,null,null,null,null,null,null,null,null,null,null,null],[null,"#eee9e4","#675b56","#74645b","#675b56","#74645b",null,null,null,null,null,null,null,null,null,null,null,null],["#74645b","#625a56","#74645b","#74645b","#675b56","#74645b",null,null,null,null,null,null,null,null,null,null,null,null],["#74645b","#675b56","#74645b","#675b56",null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,"#eee9e4","#675b56",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],[null,null,"#74645b",null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]]}};
+
+// ============================================================
+// LEVEL 1 — Midnight Forest (candle, soft wavy light)
+// ============================================================
+const L1_CANOPY_RAMP = ['#030604', '#07120a', '#0d1e11', '#142c18'];
+const L1_GLOW_RAMP = ['#0f2e22', '#1c4f3a', '#337f5c', '#54b389', '#8fe0b6', '#d9fbe8'];
+const L1_TRUNK_COLORS = ['#050a08', '#0a1410', '#101c16'];
+const L1_BRANCH_COLORS = ['#04080a', '#081410', '#0c1c14'];
+
+function L1_canopyHangDepth(x) {
+  const xNorm = x / GRID_W;
+  const lowFreqZone = Math.sin(xNorm * Math.PI * 3.2 + 2.1) * 0.5 + 0.5;
+  return GRID_H * (0.26 + lowFreqZone * 0.15) + wavy(xNorm * Math.PI * 2, 0.7, 1) * GRID_H * 0.09;
+}
+
+function L1_buildBackground(fillCell) {
+  // sky + glow spots
+  for (let y = 0; y < GRID_H; y++) {
+    const t = y / GRID_H;
+    let bandIdx = Math.min(L1_CANOPY_RAMP.length - 1, Math.floor(t * L1_CANOPY_RAMP.length));
+    for (let x = 0; x < GRID_W; x++) fillCell(x, y, L1_CANOPY_RAMP[bandIdx]);
+  }
+  const glowSpots = [
+    { cx: GRID_W*0.22, cy: GRID_H*0.36, seedOff: 1.1 },
+    { cx: GRID_W*0.62, cy: GRID_H*0.44, seedOff: 4.5 },
+    { cx: GRID_W*0.86, cy: GRID_H*0.34, seedOff: 7.2 },
+  ];
+  const glowBaseR = GRID_H*0.42;
+  for (const spot of glowSpots) {
+    for (let y=0;y<GRID_H;y++) {
+      for (let x=Math.floor(spot.cx-glowBaseR*1.4); x<spot.cx+glowBaseR*1.4; x++) {
+        if (x<0||x>=GRID_W) continue;
+        const dx=x-spot.cx, dy=(y-spot.cy)*1.3;
+        const d=Math.hypot(dx,dy);
+        const angle=Math.atan2(dy,dx);
+        const wobble=wavy(angle, spot.seedOff, 0.18);
+        const effR=glowBaseR*(1+wobble);
+        if (d>effR) continue;
+        const norm=1-d/effR;
+        const band=Math.min(L1_GLOW_RAMP.length-1, Math.floor(norm*L1_GLOW_RAMP.length*0.7));
+        fillCell(x,y,L1_GLOW_RAMP[band]);
+      }
+    }
+  }
+  // canopy
+  for (let x=0;x<GRID_W;x++) {
+    const hangDepth = L1_canopyHangDepth(x) + (rand()-0.5)*3;
+    for (let y=0;y<hangDepth;y++) {
+      const t=y/GRID_H;
+      let bandIdx=Math.max(0,Math.min(L1_CANOPY_RAMP.length-1, Math.floor((t/0.45)*L1_CANOPY_RAMP.length)));
+      fillCell(x,y,L1_CANOPY_RAMP[bandIdx]);
+    }
+    const speckCount=Math.floor(hangDepth/3.2);
+    for (let s=0;s<speckCount;s++) {
+      if (rand()<0.4) {
+        const sy=Math.floor(rand()*hangDepth);
+        const bright=rand()<0.25;
+        fillCell(x,sy, bright?L1_CANOPY_RAMP[3]:L1_CANOPY_RAMP[Math.min(2,L1_CANOPY_RAMP.length-1)]);
+      }
+    }
+  }
+  // vines
+  let vx=6;
+  while (vx<GRID_W-6) {
+    vx += 9+Math.floor(rand()*16);
+    if (vx>=GRID_W-6) break;
+    const canopyBottom = Math.floor(L1_canopyHangDepth(vx));
+    const vineLen = 5+Math.floor(rand()*12);
+    const sway = (rand()-0.5)*2;
+    for (let i=0;i<vineLen;i++) {
+      const vy=canopyBottom+i;
+      if (vy>=GRID_H) break;
+      const vxx=Math.round(vx+Math.sin(i*0.5)*sway);
+      if (vxx<0||vxx>=GRID_W) continue;
+      fillCell(vxx,vy, L1_CANOPY_RAMP[i%2===0?1:2]);
+      if (i===vineLen-1 && rand()<0.6) {
+        if (vxx-1>=0) fillCell(vxx-1,vy,L1_CANOPY_RAMP[2]);
+        if (vxx+1<GRID_W) fillCell(vxx+1,vy,L1_CANOPY_RAMP[2]);
+      }
+    }
+  }
+  // trunks
+  function drawTrunk(baseX,width,topY,colorShift) {
+    for (let y=topY;y<GRID_H;y++) {
+      const t=(y-topY)/(GRID_H-topY);
+      const wob=wavy(t*Math.PI, baseX*0.3, 1.2);
+      const w=width+wob;
+      let colorIdx=Math.max(0,Math.min(L1_TRUNK_COLORS.length-1, Math.floor(t*L1_TRUNK_COLORS.length)+colorShift));
+      for (let dx=-w;dx<=w;dx++) {
+        const x=Math.round(baseX+dx);
+        if (x<0||x>=GRID_W) continue;
+        fillCell(x,y,L1_TRUNK_COLORS[colorIdx]);
+      }
+    }
+    const rootY=GRID_H-3;
+    for (let dx=-width-3;dx<=width+3;dx++) {
+      const x=Math.round(baseX+dx);
+      if (x<0||x>=GRID_W) continue;
+      if (Math.abs(dx)>width && rand()<0.5) continue;
+      fillCell(x,rootY,L1_TRUNK_COLORS[2]);
+    }
+  }
+  const foregroundXs=[GRID_W*0.06,GRID_W*0.33,GRID_W*0.52,GRID_W*0.78,GRID_W*0.95];
+  for (const x of foregroundXs) drawTrunk(x, 3+Math.floor(rand()*2), GRID_H*(0.12+rand()*0.08), 0);
+  const backgroundXs=[GRID_W*0.18,GRID_W*0.42,GRID_W*0.68,GRID_W*0.88];
+  for (const x of backgroundXs) drawTrunk(x, 1+rand(), GRID_H*(0.20+rand()*0.06), 1);
+  // branch
+  const centerY=GRID_H*0.76;
+  for (let x=0;x<GRID_W;x++) {
+    const xNorm=x/GRID_W;
+    const topWob=wavy(xNorm*Math.PI*2,1.9,1)*3;
+    const thickness=8+wavy(xNorm*Math.PI*2,5.5,1)*2;
+    const top=Math.round(centerY+topWob);
+    const bottom=Math.round(top+thickness);
+    for (let y=top;y<=bottom && y<GRID_H;y++) {
+      const isTopSurface=y-top<2;
+      let color;
+      if (isTopSurface) color=((x+y)%3===0)?L1_BRANCH_COLORS[2]:L1_BRANCH_COLORS[1];
+      else color=(rand()<0.12)?L1_BRANCH_COLORS[1]:L1_BRANCH_COLORS[0];
+      fillCell(x,y,color);
+    }
+  }
+  // undergrowth
+  const groundY=GRID_H*0.74;
+  let ux=4;
+  while (ux<GRID_W-4) {
+    ux += 6+Math.floor(rand()*12);
+    if (ux>=GRID_W-4) break;
+    const isFlowerCluster=rand()<0.3;
+    if (isFlowerCluster) {
+      const stemH=3+Math.floor(rand()*4);
+      for (let i=0;i<stemH;i++) {
+        const gy=Math.round(groundY)+6-i;
+        if (gy>=0&&gy<GRID_H) fillCell(ux,gy,L1_CANOPY_RAMP[2]);
+      }
+      const topY=Math.round(groundY)+6-stemH;
+      if (topY>=0&&topY<GRID_H) fillCell(ux,topY,L1_GLOW_RAMP[4]);
+    } else {
+      const bushR=2+Math.floor(rand()*2);
+      const bushCY=Math.round(groundY)+4;
+      for (let dy=-bushR;dy<=bushR;dy++) {
+        for (let dx=-bushR;dx<=bushR;dx++) {
+          if (dx*dx+dy*dy>bushR*bushR+1) continue;
+          const bx=ux+dx, by=bushCY+dy;
+          if (bx<0||bx>=GRID_W||by<0||by>=GRID_H) continue;
+          fillCell(bx,by,L1_CANOPY_RAMP[rand()<0.3?2:1]);
+        }
+      }
+    }
+  }
+}
+
+const L1_fireflies = [];
+function L1_initDecor() {
+  L1_fireflies.length = 0;
+  for (let i=0;i<40;i++) {
+    L1_fireflies.push({ x:rand()*GRID_W, y:GRID_H*0.45+rand()*GRID_H*0.45, phase:rand()*Math.PI*2, speedPhase:0.02+rand()*0.03 });
+  }
+}
+function L1_drawDecor(targetCtx, t) {
+  for (const f of L1_fireflies) {
+    const flick=0.5+0.5*Math.sin(t*f.speedPhase+f.phase);
+    const band=Math.min(L1_GLOW_RAMP.length-1, Math.floor(flick*L1_GLOW_RAMP.length));
+    targetCtx.fillStyle = L1_GLOW_RAMP[Math.max(3,band)];
+    targetCtx.fillRect(Math.round(f.x)*CELL, Math.round(f.y)*CELL, CELL, CELL);
+  }
+}
+
+const L1_FLAME_OFFSET_Y = -9.5;
+const L1_CANDLE_SPRITE_BASE = [
+  [-3,0,'#6e5128'], [-2,0,'#8a6a38'], [-1,0,'#9c7a44'], [0,0,'#a5824c'], [1,0,'#9c7a44'], [2,0,'#8a6a38'], [3,0,'#6e5128'],
+  [0,-1,'#8a6a38'], [0,-2,'#8a6a38'],
+  [-1,-3,'#a5824c'], [0,-3,'#b08d54'], [1,-3,'#a5824c'],
+  [-1,-4,'#e8dbb0'], [0,-4,'#f3e8c8'], [1,-4,'#e8dbb0'],
+  [-1,-5,'#e8dbb0'], [0,-5,'#f3e8c8'], [1,-5,'#e8dbb0'],
+  [-1,-6,'#e8dbb0'], [0,-6,'#f3e8c8'], [1,-6,'#e8dbb0'],
+  [0,-7,'#f3e8c8'],
+];
+function L1_drawPlayer(targetCtx, t) {
+  const baseGX = Math.round(player.gx), baseGY = Math.round(player.gy);
+  for (const [dx,dy,color] of L1_CANDLE_SPRITE_BASE) {
+    targetCtx.fillStyle = color;
+    targetCtx.fillRect((baseGX+dx)*CELL, (baseGY+dy)*CELL, CELL, CELL);
+  }
+  targetCtx.fillStyle = '#2a1c10';
+  targetCtx.fillRect(baseGX*CELL, (baseGY-8)*CELL, CELL, CELL);
+  const flick = Math.sin(t/90) + Math.sin(t/53)*0.6;
+  const flameOffset = flick>0.9?1:(flick<-0.9?-1:0);
+  const flameTop = flick>0.3;
+  targetCtx.fillStyle = '#ffb347';
+  targetCtx.fillRect((baseGX+flameOffset)*CELL, (baseGY-9)*CELL, CELL, CELL);
+  targetCtx.fillStyle = '#fff4c2';
+  targetCtx.fillRect(baseGX*CELL, (baseGY-10)*CELL, CELL, CELL);
+  if (flameTop) {
+    targetCtx.fillStyle = '#ffdca0';
+    targetCtx.fillRect((baseGX+flameOffset)*CELL, (baseGY-11)*CELL, CELL, CELL);
+  }
+}
+function L1_emitLight(t) {
+  addSoftLightSource(player.gx, player.gy + L1_FLAME_OFFSET_Y, RADIUS, WOBBLE, INTENSITY, t, 0);
+}
+
+// ============================================================
+// LEVEL 2 — Ocean Floor (flashlight, hard-edged disc)
+// ============================================================
+const L2_WATER_RAMP = ['#031018', '#06202c', '#0b3344', '#124a5c'];
+const L2_RAY_RAMP = ['#124a5c', '#1f6e82', '#3a9bab', '#6fc9d4', '#b7ecee'];
+const L2_KELP_COLORS = ['#062018', '#0c3524', '#134a30', '#1d6440'];
+const L2_ROCK_COLORS = ['#0a1418', '#121e22', '#1a2a2e'];
+const L2_SAND_COLORS = ['#3a3222', '#4a4030', '#5a4e3a'];
+
+function L2_seabedY(x) {
+  const xNorm = x/GRID_W;
+  return GRID_H*0.82 + wavy(xNorm*Math.PI*2, 2.4, 1)*GRID_H*0.025;
+}
+
+function L2_buildBackground(fillCell) {
+  for (let y=0;y<GRID_H;y++) {
+    const t=y/GRID_H;
+    const color = lerpRamp(L2_WATER_RAMP, 1-t);
+    for (let x=0;x<GRID_W;x++) fillCell(x,y,color);
+  }
+  const rays = [
+    { cx: GRID_W*0.20, topW:16, seedOff:1.3 },
+    { cx: GRID_W*0.52, topW:22, seedOff:4.1 },
+    { cx: GRID_W*0.78, topW:14, seedOff:7.6 },
+  ];
+  for (const ray of rays) {
+    const rayLen = GRID_H*(0.55+rand()*0.15);
+    for (let y=0;y<rayLen;y++) {
+      const depthT=y/rayLen;
+      const width=ray.topW*(1-depthT*0.85);
+      const xNorm=y/GRID_H;
+      const sway=wavy(xNorm*Math.PI*2, ray.seedOff, 1)*4*(1-depthT*0.5);
+      const centerX=ray.cx+sway;
+      const brightness=(1-depthT);
+      const bandIdx=Math.min(L2_RAY_RAMP.length-1, Math.floor(brightness*L2_RAY_RAMP.length));
+      for (let dx=-width/2;dx<=width/2;dx++) {
+        const x=Math.round(centerX+dx);
+        if (x<0||x>=GRID_W) continue;
+        const edgeFactor=1-Math.abs(dx)/(width/2+0.001);
+        if (edgeFactor<0.25 && rand()<0.5) continue;
+        fillCell(x,y,L2_RAY_RAMP[bandIdx]);
+      }
+    }
+  }
+  function drawRock(baseX,width,height) {
+    const baseY=Math.floor(L2_seabedY(baseX));
+    for (let y=baseY;y>baseY-height;y--) {
+      const t=(baseY-y)/height;
+      const w=width*(1-t*0.7);
+      const wob=wavy(t*Math.PI, baseX*0.2, 0.8);
+      const colorIdx=Math.min(L2_ROCK_COLORS.length-1, Math.floor((1-t)*L2_ROCK_COLORS.length));
+      for (let dx=-(w+wob);dx<=(w+wob);dx++) {
+        const x=Math.round(baseX+dx);
+        if (x<0||x>=GRID_W) continue;
+        fillCell(x,y,L2_ROCK_COLORS[colorIdx]);
+      }
+    }
+  }
+  const rockXs=[GRID_W*0.08,GRID_W*0.24,GRID_W*0.38,GRID_W*0.58,GRID_W*0.70,GRID_W*0.86,GRID_W*0.96];
+  for (const x of rockXs) drawRock(x, 4+rand()*4, 6+rand()*10);
+  // kelp
+  let kx=5;
+  while (kx<GRID_W-5) {
+    kx += 7+Math.floor(rand()*14);
+    if (kx>=GRID_W-5) break;
+    const baseY=Math.floor(L2_seabedY(kx));
+    const kelpLen=10+Math.floor(rand()*26);
+    const sway=1.5+rand()*2;
+    const phase=rand()*Math.PI*2;
+    for (let i=0;i<kelpLen;i++) {
+      const ky=baseY-i;
+      if (ky<0) break;
+      const t=i/kelpLen;
+      const kxx=Math.round(kx+Math.sin(i*0.35+phase)*sway*(0.3+t));
+      if (kxx<0||kxx>=GRID_W) continue;
+      const colorIdx=Math.min(L2_KELP_COLORS.length-1, Math.floor(t*L2_KELP_COLORS.length));
+      fillCell(kxx,ky,L2_KELP_COLORS[colorIdx]);
+      if (rand()<0.2 && kxx-1>=0) fillCell(kxx-1,ky,L2_KELP_COLORS[Math.max(0,colorIdx-1)]);
+    }
+  }
+  // seabed
+  for (let x=0;x<GRID_W;x++) {
+    const top=Math.floor(L2_seabedY(x));
+    for (let y=top;y<GRID_H;y++) {
+      const isTopSurface=y-top<2;
+      let color;
+      if (isTopSurface) color=((x+y)%3===0)?L2_SAND_COLORS[2]:L2_SAND_COLORS[1];
+      else color=(rand()<0.1)?L2_SAND_COLORS[1]:L2_SAND_COLORS[0];
+      fillCell(x,y,color);
+    }
+  }
+}
+
+const L2_bubbles = [];
+function L2_initDecor() {
+  L2_bubbles.length = 0;
+  for (let i=0;i<55;i++) {
+    L2_bubbles.push({ x:rand()*GRID_W, y:rand()*GRID_H, speed:0.01+rand()*0.025, phase:rand()*Math.PI*2, size:rand()<0.15?2:1 });
+  }
+}
+let L2_lastT = 0;
+function L2_drawDecor(targetCtx, t) {
+  const dt = L2_lastT ? Math.min(2,(t-L2_lastT)/16.7) : 1;
+  L2_lastT = t;
+  for (const b of L2_bubbles) {
+    b.y -= b.speed*dt;
+    if (b.y<0) { b.y=GRID_H; b.x=rand()*GRID_W; }
+    const wob=Math.sin(b.y*0.2+b.phase)*1.2;
+    const x=Math.round(b.x+wob), y=Math.round(b.y);
+    targetCtx.fillStyle = L2_RAY_RAMP[4];
+    targetCtx.globalAlpha = 0.8;
+    targetCtx.fillRect(x*CELL, y*CELL, b.size*CELL, b.size*CELL);
+    targetCtx.globalAlpha = 1;
+  }
+}
+
+const L2_FLASHLIGHT_BODY = [
+  [-3,-1,'#2a2e34'], [-2,-1,'#3a3f47'], [-1,-1,'#3a3f47'], [0,-1,'#454b54'], [1,-1,'#454b54'],
+  [-3,0, '#2a2e34'], [-2,0, '#454b54'], [-1,0, '#454b54'], [0,0, '#505761'], [1,0, '#505761'],
+  [-3,1, '#1e2126'], [-2,1, '#2a2e34'], [-1,1, '#2a2e34'], [0,1, '#2a2e34'], [1,1, '#2a2e34'],
+];
+function L2_drawPlayer(targetCtx, t) {
+  const bgx=player.gx, bgy=player.gy;
+  const angle=player.facing;
+  const cosA=Math.cos(angle), sinA=Math.sin(angle);
+  for (const [lx,ly,color] of L2_FLASHLIGHT_BODY) {
+    const rx=lx*cosA-ly*sinA, ry=lx*sinA+ly*cosA;
+    const wx=Math.round(bgx+rx), wy=Math.round(bgy+ry);
+    targetCtx.fillStyle = color;
+    targetCtx.fillRect(wx*CELL, wy*CELL, CELL, CELL);
+  }
+  const lensLocal=[2,-1, 2,0, 2,1, 3,0];
+  targetCtx.fillStyle = '#eaf6ff';
+  for (let i=0;i<lensLocal.length;i+=2) {
+    const lx=lensLocal[i], ly=lensLocal[i+1];
+    const rx=lx*cosA-ly*sinA, ry=lx*sinA+ly*cosA;
+    const wx=Math.round(bgx+rx), wy=Math.round(bgy+ry);
+    targetCtx.fillRect(wx*CELL, wy*CELL, CELL, CELL);
+  }
+}
+function L2_emitLight(t) {
+  addHardLightSource(player.gx, player.gy, RADIUS, INTENSITY);
+}
+
+// ============================================================
+// LEVEL 3 — City Park (searchlight, downward cone)
+// ============================================================
+const L3_SKY_RAMP = ['#07071a', '#0d0d26', '#15152f', '#1e1e3a'];
+const L3_LAMP_RAMP = ['#2a1f10', '#5a4218', '#9c7a28', '#dcb24a', '#ffe9a8'];
+const L3_TREE_RAMP = ['#030a05', '#0a1a0d', '#123018', '#1c4624'];
+const L3_TRUNK_COLORS = ['#1a140e', '#2a2016', '#3a2c1c'];
+const L3_PATH_COLORS = ['#3a3a42', '#4a4a54', '#585864'];
+const L3_BUSH_COLORS = ['#0a1a0c', '#143018', '#1e4422'];
+const L3_FLOWER_ACCENT = ['#e0527a', '#e8a04a', '#e8e0a0'];
+const L3_lampPositions = [
+  { x: GRID_W*0.12, y: GRID_H*0.80 },
+  { x: GRID_W*0.38, y: GRID_H*0.78 },
+  { x: GRID_W*0.64, y: GRID_H*0.82 },
+  { x: GRID_W*0.88, y: GRID_H*0.79 },
+];
+function L3_pathY(x) {
+  const xNorm=x/GRID_W;
+  return GRID_H*0.90 + wavy(xNorm*Math.PI*2, 3.3, 1)*GRID_H*0.02;
+}
+
+function L3_buildBackground(fillCell) {
+  for (let y=0;y<GRID_H;y++) {
+    const t=y/GRID_H;
+    const color = lerpRamp(L3_SKY_RAMP, t);
+    for (let x=0;x<GRID_W;x++) fillCell(x,y,color);
+  }
+  // stars
+  for (let i=0;i<140;i++) {
+    const x=Math.floor(rand()*GRID_W), y=Math.floor(rand()*GRID_H*0.45);
+    const bright=rand();
+    const color = bright<0.6?'#2a2a44':(bright<0.88?'#4a4a6e':'#c8c8e8');
+    fillCell(x,y,color);
+  }
+  // skyline
+  const baseY=GRID_H*0.58;
+  let sx=0;
+  while (sx<GRID_W) {
+    const bw=6+Math.floor(rand()*10);
+    const bh=10+Math.floor(rand()*26);
+    const topY=Math.round(baseY-bh);
+    const shade = rand()<0.5?'#121228':'#181830';
+    for (let yy=topY;yy<baseY;yy++) {
+      for (let xx=sx;xx<sx+bw && xx<GRID_W;xx++) fillCell(xx,yy,shade);
+    }
+    const windowRows=Math.floor(bh/4);
+    for (let wy=0;wy<windowRows;wy++) {
+      for (let wx=sx+1;wx<sx+bw-1;wx+=2) {
+        if (rand()<0.22) {
+          const py=topY+2+wy*4;
+          if (py<baseY-1) fillCell(wx,py,L3_LAMP_RAMP[3]);
+        }
+      }
+    }
+    sx += bw+1;
+  }
+  // lamp glows
+  for (const lamp of L3_lampPositions) {
+    const baseR=GRID_H*0.17;
+    for (let y=0;y<GRID_H;y++) {
+      for (let x=Math.floor(lamp.x-baseR*1.4); x<lamp.x+baseR*1.4; x++) {
+        if (x<0||x>=GRID_W) continue;
+        const dx=x-lamp.x, dy=(y-lamp.y)*1.5;
+        const d=Math.hypot(dx,dy);
+        const angle=Math.atan2(dy,dx);
+        const wobble=wavy(angle, lamp.x*0.1, 0.15);
+        const effR=baseR*(1+wobble);
+        if (d>effR) continue;
+        const norm=1-d/effR;
+        const idxBand=Math.min(L3_LAMP_RAMP.length-1, Math.floor(norm*L3_LAMP_RAMP.length*0.8));
+        fillCell(x,y,L3_LAMP_RAMP[idxBand]);
+      }
+    }
+  }
+  // trees
+  function drawParkTree(cx,groundY,canopyR,trunkH) {
+    const canopyCY = groundY-trunkH-canopyR*0.7;
+    for (let dy=-canopyR;dy<=canopyR;dy++) {
+      for (let dx=-canopyR;dx<=canopyR;dx++) {
+        const angle=Math.atan2(dy,dx);
+        const wobble=wavy(angle, cx*0.17, 0.12);
+        const effR=canopyR*(1+wobble);
+        const d=Math.hypot(dx,dy);
+        if (d>effR) continue;
+        const x=Math.round(cx+dx), y=Math.round(canopyCY+dy);
+        if (x<0||x>=GRID_W||y<0) continue;
+        const norm=1-d/effR;
+        let bandIdx=Math.min(L3_TREE_RAMP.length-1, Math.floor(norm*L3_TREE_RAMP.length*0.85)+(rand()<0.15?1:0));
+        fillCell(x,y,L3_TREE_RAMP[Math.min(L3_TREE_RAMP.length-1,bandIdx)]);
+      }
+    }
+    for (let i=0;i<trunkH;i++) {
+      const y=groundY-i;
+      if (y<0) break;
+      const w=1+(trunkH-i)*0.03;
+      const colorIdx=Math.min(L3_TRUNK_COLORS.length-1, Math.floor(i/trunkH*L3_TRUNK_COLORS.length));
+      for (let dx=-w;dx<=w;dx++) {
+        const x=Math.round(cx+dx);
+        if (x<0||x>=GRID_W) continue;
+        fillCell(x,y,L3_TRUNK_COLORS[colorIdx]);
+      }
+    }
+  }
+  const trees = [
+    { x:GRID_W*0.05, gy:GRID_H*0.82, r:10, trunk:11 },
+    { x:GRID_W*0.22, gy:GRID_H*0.80, r:7,  trunk:8  },
+    { x:GRID_W*0.50, gy:GRID_H*0.81, r:12, trunk:13 },
+    { x:GRID_W*0.76, gy:GRID_H*0.80, r:8,  trunk:9  },
+    { x:GRID_W*0.96, gy:GRID_H*0.82, r:10, trunk:11 },
+    { x:GRID_W*0.14, gy:GRID_H*0.68, r:5,  trunk:5  },
+    { x:GRID_W*0.60, gy:GRID_H*0.66, r:6,  trunk:6  },
+    { x:GRID_W*0.86, gy:GRID_H*0.67, r:5,  trunk:5  },
+  ];
+  for (const tr of trees) drawParkTree(tr.x, tr.gy, tr.r, tr.trunk);
+  // path
+  for (let x=0;x<GRID_W;x++) {
+    const top=Math.floor(L3_pathY(x));
+    const thickness=10;
+    for (let y=top;y<top+thickness && y<GRID_H;y++) {
+      const seam = ((x%6===0)||((y-top)===0));
+      const color = seam?L3_PATH_COLORS[0]:(rand()<0.08?L3_PATH_COLORS[2]:L3_PATH_COLORS[1]);
+      fillCell(x,y,color);
+    }
+  }
+  // benches + lamp posts
+  function drawBench(cx,groundY) {
+    const y=groundY-3;
+    for (let dx=-5;dx<=5;dx++) fillCell(Math.round(cx+dx), y, '#4a3626');
+    for (let dx=-5;dx<=5;dx++) fillCell(Math.round(cx+dx), y+1, '#3a2a1c');
+    fillCell(Math.round(cx-4), y+2, '#241a10'); fillCell(Math.round(cx+4), y+2, '#241a10');
+    fillCell(Math.round(cx-4), y+3, '#241a10'); fillCell(Math.round(cx+4), y+3, '#241a10');
+    for (let dx=-4;dx<=4;dx++) fillCell(Math.round(cx+dx), y-3, '#4a3626');
+    for (let dx=-4;dx<=4;dx+=4) { fillCell(Math.round(cx+dx), y-2, '#3a2a1c'); fillCell(Math.round(cx+dx), y-1, '#3a2a1c'); }
+  }
+  function drawLampPost(cx,groundY) {
+    const poleH=20;
+    for (let i=0;i<poleH;i++) {
+      const y=groundY-i;
+      if (y<0) break;
+      fillCell(Math.round(cx), y, i<poleH-3?'#1a1a22':'#2a2a34');
+    }
+    const topY=groundY-poleH;
+    for (let dx=-2;dx<=2;dx++) fillCell(Math.round(cx+dx), topY, '#2a2a34');
+    for (let dx=-1;dx<=1;dx++) {
+      fillCell(Math.round(cx+dx), topY+1, L3_LAMP_RAMP[4]);
+      fillCell(Math.round(cx+dx), topY+2, L3_LAMP_RAMP[3]);
+    }
+  }
+  drawBench(GRID_W*0.26, Math.floor(L3_pathY(GRID_W*0.26)));
+  drawBench(GRID_W*0.70, Math.floor(L3_pathY(GRID_W*0.70)));
+  for (const lamp of L3_lampPositions) drawLampPost(lamp.x, Math.floor(L3_pathY(lamp.x)));
+  // flowerbeds
+  let fx=6;
+  while (fx<GRID_W-6) {
+    fx += 8+Math.floor(rand()*12);
+    if (fx>=GRID_W-6) break;
+    const groundY=Math.floor(L3_pathY(fx));
+    const isFlower=rand()<0.4;
+    const bushR=2+Math.floor(rand()*2);
+    const cy=groundY-bushR+1;
+    for (let dy=-bushR;dy<=bushR;dy++) {
+      for (let dx=-bushR;dx<=bushR;dx++) {
+        if (dx*dx+dy*dy>bushR*bushR+1) continue;
+        const bx=fx+dx, by=cy+dy;
+        if (bx<0||bx>=GRID_W||by<0||by>=GRID_H) continue;
+        fillCell(bx,by, L3_BUSH_COLORS[rand()<0.3?2:1]);
+      }
+    }
+    if (isFlower && rand()<0.6) {
+      const flx = fx + Math.floor((rand()-0.5)*bushR);
+      const fly = cy - bushR + 1;
+      fillCell(flx, fly, L3_FLOWER_ACCENT[Math.floor(rand()*L3_FLOWER_ACCENT.length)]);
+    }
+  }
+}
+
+const L3_moths = [];
+function L3_initDecor() {
+  L3_moths.length = 0;
+  for (const lamp of L3_lampPositions) {
+    const count = 4+Math.floor(rand()*3);
+    for (let i=0;i<count;i++) {
+      L3_moths.push({ lampX:lamp.x, lampY:lamp.y-20, angle:rand()*Math.PI*2, radius:3+rand()*6, speed:0.02+rand()*0.03, bob:rand()*Math.PI*2 });
+    }
+  }
+}
+function L3_drawDecor(targetCtx, t) {
+  for (const m of L3_moths) {
+    m.angle += m.speed;
+    const x = m.lampX + Math.cos(m.angle)*m.radius;
+    const y = m.lampY + Math.sin(m.angle)*m.radius*0.6 + Math.sin(t/300+m.bob)*1.5;
+    const flick = 0.6+0.4*Math.sin(t/150+m.bob);
+    targetCtx.fillStyle = L3_LAMP_RAMP[4];
+    targetCtx.globalAlpha = flick;
+    targetCtx.fillRect(Math.round(x)*CELL, Math.round(y)*CELL, CELL, CELL);
+    targetCtx.globalAlpha = 1;
+  }
+}
+
+function L3_drawPlayer(targetCtx, t) {
+  const bgx=Math.round(player.gx), bgy=Math.round(player.gy);
+  const pulse = 0.8+0.2*Math.sin(t/200);
+  targetCtx.globalAlpha = pulse;
+  targetCtx.fillStyle = '#fff6d8';
+  targetCtx.fillRect((bgx-1)*CELL, bgy*CELL, 3*CELL, CELL);
+  targetCtx.fillStyle = '#ffe9a8';
+  targetCtx.fillRect(bgx*CELL, (bgy-1)*CELL, CELL, CELL);
+  targetCtx.globalAlpha = 1;
+}
+function L3_emitLight(t) {
+  addSearchlightCone(player.gx, player.gy, 1.5, RADIUS, INTENSITY, BLOOM_R, 28);
+}
+
+// ============================================================
+// LEVEL REGISTRY
+// ============================================================
+const LEVELS = [
+  {
+    title: 'Level 1: Midnight Forest',
+    hint: 'Move. Hold your light on the dark until something wakes up.',
+    seed: 1234,
+    buildBackground: L1_buildBackground,
+    initDecor: L1_initDecor,
+    drawDecor: L1_drawDecor,
+    drawPlayer: L1_drawPlayer,
+    emitLight: L1_emitLight,
+    pixelData: BIRD_PIXEL_DATA,
+    auraColors: { robin:'#3a6cc0', quail:'#8a6a42', magpie:'#3a6cc0', bullfinch:'#e2543c', kingfisher:'#2a9fd6' },
+    creatureDefs: [
+      { type:'robin',      gx: GRID_W*0.14, gy: GRID_H*0.70 },
+      { type:'quail',      gx: GRID_W*0.27, gy: GRID_H*0.73 },
+      { type:'magpie',     gx: GRID_W*0.46, gy: GRID_H*0.52 },
+      { type:'bullfinch',  gx: GRID_W*0.60, gy: GRID_H*0.66 },
+      { type:'kingfisher', gx: GRID_W*0.72, gy: GRID_H*0.40 },
+      { type:'magpie',     gx: GRID_W*0.84, gy: GRID_H*0.48 },
+      { type:'robin',      gx: GRID_W*0.91, gy: GRID_H*0.68 },
+    ],
+    bounds: { minX:2, maxX:GRID_W-3, minY:11, maxY:GRID_H-4 },
+    playerStart: { gx: GRID_W*0.5, gy: GRID_H*0.58 },
+    sliderDefaults: { speed:1.7, decay:0.94, radius:18, intensity:40, wobble:0.22, bloom:10 },
+    showWobble: true, showBloom: false,
+    darkColor: '2,3,4',
+  },
+  {
+    title: 'Level 2: Ocean Floor',
+    hint: 'Move. The flashlight is a hard-edged circle — no soft falloff.',
+    seed: 4321,
+    buildBackground: L2_buildBackground,
+    initDecor: L2_initDecor,
+    drawDecor: L2_drawDecor,
+    drawPlayer: L2_drawPlayer,
+    emitLight: L2_emitLight,
+    pixelData: FISH_PIXEL_DATA,
+    auraColors: { dolphin:'#6fa3e0', turtle:'#8aa868', octopus:'#b896c8', flatfish:'#b88a5a', crab:'#d46a4a', lobster:'#d4824a', lionfish:'#c87858' },
+    creatureDefs: [
+      { type:'dolphin',  gx: GRID_W*0.15, gy: GRID_H*0.34 },
+      { type:'turtle',   gx: GRID_W*0.30, gy: GRID_H*0.70 },
+      { type:'octopus',  gx: GRID_W*0.46, gy: GRID_H*0.58 },
+      { type:'flatfish', gx: GRID_W*0.60, gy: GRID_H*0.76 },
+      { type:'crab',     gx: GRID_W*0.72, gy: GRID_H*0.78 },
+      { type:'lobster',  gx: GRID_W*0.85, gy: GRID_H*0.76 },
+      { type:'lionfish', gx: GRID_W*0.92, gy: GRID_H*0.42 },
+    ],
+    bounds: { minX:4, maxX:GRID_W-5, minY:4, maxY:GRID_H-5 },
+    playerStart: { gx: GRID_W*0.5, gy: GRID_H*0.45 },
+    sliderDefaults: { speed:1.7, decay:0.93, radius:20, intensity:60, wobble:0.22, bloom:10 },
+    showWobble: false, showBloom: false,
+    darkColor: '1,4,6',
+  },
+  {
+    title: 'Level 3: City Park',
+    hint: 'Move. The searchlight always points straight down from above.',
+    seed: 7788,
+    buildBackground: L3_buildBackground,
+    initDecor: L3_initDecor,
+    drawDecor: L3_drawDecor,
+    drawPlayer: L3_drawPlayer,
+    emitLight: L3_emitLight,
+    pixelData: PARK_PIXEL_DATA,
+    auraColors: { cat:'#9898a8', sparrow:'#e0c078', jay:'#5a6ea0', bullfinch2:'#e0a0a8', owl2:'#e8e0c0', beeeater:'#a8d868', wren:'#c8986a' },
+    creatureDefs: [
+      { type:'cat',        gx: GRID_W*0.42, gy: Math.floor(L3_pathY(GRID_W*0.42)) - 1 },
+      { type:'sparrow',    gx: GRID_W*0.08, gy: GRID_H*0.66 },
+      { type:'jay',        gx: GRID_W*0.22, gy: GRID_H*0.60 },
+      { type:'bullfinch2', gx: GRID_W*0.56, gy: GRID_H*0.64 },
+      { type:'owl2',       gx: GRID_W*0.68, gy: GRID_H*0.58 },
+      { type:'beeeater',   gx: GRID_W*0.82, gy: GRID_H*0.62 },
+      { type:'wren',       gx: GRID_W*0.94, gy: GRID_H*0.70 },
+    ],
+    bounds: { minX:6, maxX:GRID_W-7, minY:10, maxY:GRID_H-4 },
+    playerStart: { gx: GRID_W*0.5, gy: GRID_H*0.55 },
+    sliderDefaults: { speed:1.7, decay:0.93, radius:20, intensity:60, wobble:0.22, bloom:12 },
+    showWobble: false, showBloom: true,
+    darkColor: '2,2,8',
+  },
+];
+
+// ============================================================
+// Level lifecycle
+// ============================================================
+let currentLevelIndex = 0;
+let nextLevelShown = false;
+
+function applySliderDefaults(level) {
+  const d = level.sliderDefaults;
+  SPEED=d.speed; DECAY=d.decay; RADIUS=d.radius; INTENSITY=d.intensity; WOBBLE=d.wobble; BLOOM_R=d.bloom;
+  speedCtrl.value=d.speed; decayCtrl.value=d.decay; radiusCtrl.value=d.radius;
+  intensityCtrl.value=d.intensity; wobbleCtrl.value=d.wobble; bloomCtrl.value=d.bloom;
+  document.getElementById('wobbleRow').style.display = level.showWobble ? 'flex' : 'none';
+  document.getElementById('bloomRow').style.display = level.showBloom ? 'flex' : 'none';
+}
+
+function startLevel(i) {
+  currentLevelIndex = i;
+  const level = LEVELS[i];
+  seed = level.seed;
+  lightField = new Float32Array(GRID_W * GRID_H);
+  allFoundProgress = 0;
+  nextLevelShown = false;
+
+  level.creatures = level.creatureDefs.map(c => ({ ...c, exposure:0, discovered:false }));
+
+  bgCanvas = document.createElement('canvas');
+  bgCanvas.width = canvas.width; bgCanvas.height = canvas.height;
+  drawCtx = bgCanvas.getContext('2d');
+  level.buildBackground((x,y,color) => { drawCtx.fillStyle=color; drawCtx.fillRect(x*CELL,y*CELL,CELL,CELL); });
+
+  level.initDecor();
+
+  player.gx = level.playerStart.gx;
+  player.gy = level.playerStart.gy;
+  player.facing = 0;
+
+  applySliderDefaults(level);
+
+  document.getElementById('levelTitle').textContent = level.title;
+  document.getElementById('hintText').textContent = level.hint;
+  updateProgressLabel();
+
+  document.getElementById('nextLevelOverlay').classList.remove('show');
+  document.getElementById('endOverlay').classList.remove('show');
+}
+
+let bgCanvas, drawCtx;
+
+function showNextLevelOverlay() {
+  if (currentLevelIndex >= LEVELS.length - 1) {
+    document.getElementById('endOverlay').classList.add('show');
+    return;
+  }
+  document.getElementById('nextLevelSub').textContent =
+    `Every creature in "${LEVELS[currentLevelIndex].title}" is glowing. Ready to move on?`;
+  document.getElementById('nextLevelOverlay').classList.add('show');
+}
+
+document.getElementById('nextLevelBtn').addEventListener('click', () => {
+  document.getElementById('nextLevelOverlay').classList.remove('show');
+  startLevel(currentLevelIndex + 1);
+});
+
+document.getElementById('restartBtn').addEventListener('click', () => {
+  document.getElementById('endOverlay').classList.remove('show');
+  startLevel(0);
+});
+
+// ============================================================
+// Main render + loop
+// ============================================================
+function renderWorld(t) {
+  const level = LEVELS[currentLevelIndex];
+  worldCtx.drawImage(bgCanvas, 0, 0);
+  level.drawDecor(worldCtx, t);
+  drawCreatures(level, worldCtx, t);
+
+  const revealFactor = 1 - allFoundProgress;
+  for (let y=0;y<GRID_H;y++) {
+    for (let x=0;x<GRID_W;x++) {
+      const b = lightField[idx(x,y)];
+      const darkAlpha = Math.max(0, 1 - b/CAP) * 0.93 * revealFactor;
+      if (darkAlpha < 0.01) continue;
+      worldCtx.fillStyle = `rgba(${level.darkColor},${darkAlpha})`;
+      worldCtx.fillRect(x*CELL, y*CELL, CELL, CELL);
+    }
+  }
+
+  level.drawPlayer(worldCtx, t);
+}
+
+function loop(t) {
+  const level = LEVELS[currentLevelIndex];
+  updatePlayerPosition();
+  level.emitLight(t);
+  updateCreatures(level, t);
+  updateAllFoundProgress();
+  decayLightField();
+
+  renderWorld(t);
+  ctx.drawImage(worldCanvas, 0, 0);
+
+  requestAnimationFrame(loop);
+}
+
+let gameStarted = false;
+document.getElementById('startBtn').addEventListener('click', () => {
+  if (gameStarted) return;
+  gameStarted = true;
+  document.getElementById('startScreen').classList.add('hidden');
+  startLevel(0);
+  requestAnimationFrame(loop);
+});
+
+</script>
+</body>
+</html>
